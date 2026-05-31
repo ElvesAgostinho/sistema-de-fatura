@@ -3,6 +3,8 @@ import { createAdminClient } from '@/lib/supabase/server';
 import { getCurrentUserContext } from '@/lib/auth';
 import { generateInvoiceHash } from '@/lib/hash';
 import { buildInvoiceSignaturePayload, signWithPrivateKey } from '@/lib/crypto-keys';
+import { redis } from '@/lib/redis';
+import { CacheKeys } from '@/lib/cache-keys';
 
 export const dynamic = 'force-dynamic';
 
@@ -204,12 +206,17 @@ export async function POST(req: Request) {
       ...stockUpdatePromises,
     ]);
 
-    // 3. Fire-and-forget Audit Log (Non-blocking)
+    // 3. Fire-and-forget: Audit Log + Cache Invalidation (Non-blocking)
     admin.from('audit_logs').insert({
       user_id: ctx.user.id, company_id: companyId,
       action: 'invoice.create', entity: 'invoice', entity_id: invoice.id,
       details: { invoice_number: invoice.invoice_number, total, client_nif: client.nif, hash: invoice.hash },
     }).then(({ error }) => { if (error) console.error('Audit log failed', error); });
+
+    // Invalidate dashboard cache so metrics reflect the new invoice immediately
+    if (redis) {
+      redis.del(CacheKeys.dashboardStats(companyId)).catch(() => {});
+    }
 
     return ApiResponse.success({ invoice });
   } catch (err: any) {

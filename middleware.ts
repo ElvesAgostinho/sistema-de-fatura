@@ -2,7 +2,6 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { updateSession } from '@/lib/supabase/middleware';
 import { rateLimiter, authRateLimiter } from '@/lib/redis';
 
-
 // ─── Allowed origins for CORS ─────────────────────────────────────────────────
 const ALLOWED_ORIGINS = [
   process.env.NEXTAUTH_URL ?? 'http://localhost:3000',
@@ -14,7 +13,6 @@ const ALLOWED_ORIGINS = [
 const BLOCKED_UA_PATTERNS = [/sqlmap/i, /nikto/i, /nmap/i, /masscan/i, /zgrab/i];
 
 function generateRequestId(): string {
-  // Use crypto.randomUUID if available (Node 19+), fallback to timestamp
   try {
     return crypto.randomUUID();
   } catch {
@@ -25,10 +23,7 @@ function generateRequestId(): string {
 function jsonResponse(body: object, status: number, extraHeaders?: Record<string, string>) {
   return new NextResponse(JSON.stringify(body), {
     status,
-    headers: {
-      'Content-Type': 'application/json',
-      ...extraHeaders,
-    },
+    headers: { 'Content-Type': 'application/json', ...extraHeaders },
   });
 }
 
@@ -52,7 +47,6 @@ export async function middleware(request: NextRequest) {
     const reqOrigin = request.nextUrl.origin;
     const isAllowedOrigin = !origin || origin === reqOrigin || ALLOWED_ORIGINS.includes(origin);
 
-    // Preflight
     if (request.method === 'OPTIONS') {
       return new NextResponse(null, {
         status: 204,
@@ -65,46 +59,45 @@ export async function middleware(request: NextRequest) {
         },
       });
     }
-
-    // Removed strict CORS origin block that caused 'CORS: origin not allowed' in production 
-    // due to internal URL rewrites or Vercel proxies modifying the origin header.
   }
 
-  // ── 3. Rate Limiting — Auth endpoints ────────────────────────────────────────
+  // ── 3. Rate Limiting — Auth endpoints (strict: 5 req/min per IP) ─────────────
   if (path.startsWith('/api/auth') || path === '/login' || path === '/register') {
     if (authRateLimiter) {
       const { success, limit, reset, remaining } = await authRateLimiter.limit(ip);
+      const rlHeaders = {
+        'X-RateLimit-Limit': String(limit),
+        'X-RateLimit-Remaining': String(remaining),
+        'X-RateLimit-Reset': String(reset),
+        'X-Request-ID': requestId,
+      };
       if (!success) {
         return jsonResponse(
-          {
-            error: 'Demasiadas tentativas. Tente novamente mais tarde.',
-            retryAfter: reset,
-          },
+          { error: 'Demasiadas tentativas. Tente novamente mais tarde.', retryAfter: reset },
           429,
-          {
-            'Retry-After': String(Math.ceil((reset - Date.now()) / 1000)),
-            'X-RateLimit-Limit': String(limit),
-            'X-RateLimit-Remaining': '0',
-            'X-Request-ID': requestId,
-          }
+          { ...rlHeaders, 'Retry-After': String(Math.ceil((reset - Date.now()) / 1000)) }
         );
       }
     }
   }
-  // ── 4. Rate Limiting — General API ────────────────────────────────────────────
+  // ── 4. Rate Limiting — General API (50 req/10s per user or IP) ───────────────
+  // Uses user_id when authenticated to avoid blocking shared NAT/4G IPs (common em Angola).
   else if (path.startsWith('/api/')) {
     if (rateLimiter) {
-      const { success, limit, reset, remaining } = await rateLimiter.limit(ip);
+      const userId = request.headers.get('x-supabase-user-id');
+      const limitKey = userId ? `user:${userId}` : `ip:${ip}`;
+      const { success, limit, reset, remaining } = await rateLimiter.limit(limitKey);
+      const rlHeaders = {
+        'X-RateLimit-Limit': String(limit),
+        'X-RateLimit-Remaining': String(remaining),
+        'X-RateLimit-Reset': String(reset),
+        'X-Request-ID': requestId,
+      };
       if (!success) {
         return jsonResponse(
           { error: 'Limite de pedidos excedido. Tente novamente em breve.' },
           429,
-          {
-            'Retry-After': String(Math.ceil((reset - Date.now()) / 1000)),
-            'X-RateLimit-Limit': String(limit),
-            'X-RateLimit-Remaining': '0',
-            'X-Request-ID': requestId,
-          }
+          { ...rlHeaders, 'Retry-After': String(Math.ceil((reset - Date.now()) / 1000)) }
         );
       }
     }
@@ -112,10 +105,7 @@ export async function middleware(request: NextRequest) {
 
   // ── 5. Supabase Session ────────────────────────────────────────────────────────
   const response = await updateSession(request);
-
-  // Attach request ID to response for tracing
   response.headers.set('X-Request-ID', requestId);
-
   return response;
 }
 
@@ -124,4 +114,3 @@ export const config = {
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
   ],
 };
-
