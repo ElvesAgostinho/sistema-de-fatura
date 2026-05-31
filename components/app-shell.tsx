@@ -1,17 +1,16 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { FileText, LayoutDashboard, FilePlus, Users, Package, Banknote, BarChart3, Settings, LogOut, UserCheck, Menu, X, Calendar, Calculator, ChevronDown } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { cn } from '@/lib/utils';
-import { LayoutDashboard, FileText, FilePlus, Users, Package, Settings, LogOut, Menu, X, ShieldCheck, ClipboardList, UserCheck, Receipt, BarChart3, Banknote, CreditCard, Calculator, Calendar } from 'lucide-react';
 import { toast } from 'sonner';
-import { invalidateCache, prefetchResource } from '@/lib/hooks/use-resource';
-import CertBadge from './cert-badge';
-import NavProgress from './nav-progress';
+import { cn } from '@/lib/utils';
 import NotificationBell from './notification-bell';
 import { CommandPalette } from './command-palette';
+import CertBadge from './cert-badge';
+import NavProgress from './nav-progress';
 
 const MENU_CATEGORIES = [
   {
@@ -26,7 +25,7 @@ const MENU_CATEGORIES = [
     ]
   },
   {
-    title: 'Compras & Stock',
+    title: 'Compras',
     items: [
       { href: '/purchases/new', label: 'Registar Compra', icon: FilePlus },
       { href: '/purchases', label: 'Compras', icon: FileText },
@@ -37,7 +36,7 @@ const MENU_CATEGORIES = [
 ];
 
 const COMPANY_ADMIN_CATEGORY = {
-  title: 'Gestão & Administração',
+  title: 'Gestão',
   items: [
     { href: '/reports', label: 'Relatórios', icon: BarChart3 },
     { href: '/taxes', label: 'Impostos & SAF-T', icon: Banknote },
@@ -47,11 +46,16 @@ const COMPANY_ADMIN_CATEGORY = {
 };
 
 const SUPER_ADMIN_CATEGORY = {
-  title: 'SaaS (SuperAdmin)',
+  title: 'SaaS',
   items: [
     { href: '/admin/approvals', label: 'Aprovações', icon: UserCheck },
   ]
 };
+
+// Reusable icons
+function ClipboardList(props: any) {
+  return <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></svg>
+}
 
 export default function AppShell({ children, user, company, isPlatformAdmin, role }: {
   children: React.ReactNode;
@@ -87,15 +91,6 @@ export default function AppShell({ children, user, company, isPlatformAdmin, rol
 
   const handleHoverPrefetch = (href: string) => {
     router.prefetch(href);
-    let apiUrl = '';
-    if (href === '/dashboard') apiUrl = '/api/dashboard';
-    else if (href === '/invoices') apiUrl = '/api/invoices';
-    else if (href === '/clients') apiUrl = '/api/clients';
-    else if (href === '/products') apiUrl = '/api/products';
-    else if (href === '/suppliers') apiUrl = '/api/suppliers';
-    else if (href === '/purchases') apiUrl = '/api/purchases';
-    
-    if (apiUrl) prefetchResource(apiUrl);
   };
 
   const [optimisticHref, setOptimisticHref] = useState<string | null>(null);
@@ -103,11 +98,9 @@ export default function AppShell({ children, user, company, isPlatformAdmin, rol
 
   const logout = async () => {
     try {
-      invalidateCache();
       const supabase = createClient();
       await supabase.auth.signOut();
       await fetch('/api/auth/logout', { method: 'POST' });
-      // Força um carregamento completo para limpar a cache do router do Next.js
       window.location.href = '/login';
     } catch {
       toast.error('Erro ao terminar sessão');
@@ -131,126 +124,138 @@ export default function AppShell({ children, user, company, isPlatformAdmin, rol
     if (href !== '/dashboard' && activeHref === href) return true;
     return false;
   };
+
   return (
-    <div className="min-h-screen flex bg-slate-100">
+    <div className="min-h-screen flex flex-col bg-[#F4F5F8]">
       <NavProgress />
-      {/* Sidebar desktop */}
-      <aside className="hidden md:flex w-56 flex-col bg-[#F3F4F6] border-r border-slate-300 shadow-[2px_0_5px_rgba(0,0,0,0.02)] fixed h-full z-20">
-        <div className="h-12 px-4 flex items-center gap-2 bg-[#005A9E] text-white border-b border-[#004A82]">
-          <div className="w-6 h-6 rounded bg-white/20 text-white flex items-center justify-center shadow-sm">
-            <FileText className="w-3.5 h-3.5" />
-          </div>
-          <span className="font-semibold text-sm tracking-wide">FaturaAO</span>
-        </div>
-        <div className="px-3 py-3 border-b border-slate-200 bg-white">
-          <div className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-0.5">Entidade Ativa</div>
-          <div className="text-[13px] font-bold text-slate-800 truncate">{company?.name ?? '---'}</div>
-          <div className="text-[11px] font-mono text-slate-500 mb-1">NIF: {company?.nif ?? '---'}</div>
-          <CertBadge />
-        </div>
-        <div className="pt-2 pb-1 px-2">
-          <CommandPalette />
-        </div>
-        <nav className="flex-1 overflow-y-auto p-2 space-y-3">
-          {categories.map((category, idx) => (
-            <div key={idx}>
-              <div className="px-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">
-                {category.title}
-              </div>
-              <div className="space-y-0.5">
-                {category.items.map((item) => {
-                  const Icon = item.icon;
-                  const active = isActive(item.href);
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      prefetch={true}
-                      onMouseEnter={() => handleHoverPrefetch(item.href)}
-                      onClick={() => setOptimisticHref(item.href)}
-                      className={cn(
-                        'flex items-center gap-2.5 px-2 py-1.5 rounded-sm text-[12.5px] font-medium transition-colors border border-transparent',
-                        active 
-                          ? 'bg-[#0078D4] text-white shadow-sm border-[#005A9E]' 
-                          : 'text-slate-700 hover:bg-slate-200/60 hover:border-slate-300'
-                      )}
-                    >
-                      <Icon className={cn("w-4 h-4", active ? "text-white" : "text-slate-500")} />
-                      {item.label}
-                    </Link>
-                  );
-                })}
-              </div>
+      
+      {/* Topbar Desktop */}
+      <header className="hidden md:flex flex-col bg-[#0b4a6f] text-white sticky top-0 z-40 shadow-sm">
+        {/* Superior Topbar (Logo & Perfil) */}
+        <div className="flex items-center justify-between px-6 h-14">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded bg-[#13b5ea] text-white flex items-center justify-center font-bold">
+              FA
             </div>
-          ))}
-        </nav>
-        <div className="p-2 border-t border-slate-300 bg-slate-200/50 space-y-1">
-          <div className="flex items-center justify-between px-2 py-1">
-            <div className="text-[11px] text-slate-600 font-medium truncate flex-1">{user.email}</div>
-            <NotificationBell />
+            <span className="font-semibold text-lg tracking-wide">FaturaAO</span>
+            <div className="ml-4 pl-4 border-l border-white/20">
+              <div className="text-[13px] font-bold">{company?.name ?? '---'}</div>
+              <div className="text-[11px] text-white/70">NIF: {company?.nif ?? '---'}</div>
+            </div>
+            <div className="ml-4">
+              <CertBadge />
+            </div>
           </div>
-          <button onClick={logout} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-sm text-[12.5px] font-medium text-red-700 hover:bg-red-100 border border-transparent hover:border-red-200 transition">
-            <LogOut className="w-3.5 h-3.5" /> Encerrar Sessão
-          </button>
+          
+          <div className="flex items-center gap-4">
+            <CommandPalette />
+            <NotificationBell />
+            <div className="flex items-center gap-3 pl-4 border-l border-white/20">
+              <div className="text-[13px] font-medium hidden lg:block">{user.email}</div>
+              <button onClick={logout} className="p-1.5 hover:bg-white/10 rounded-full transition-colors text-white" title="Encerrar Sessão">
+                <LogOut className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
         </div>
-      </aside>
+
+        {/* Inferior Topbar (Menu Navigation) */}
+        <div className="flex items-center px-6 h-12 bg-[#093c5a] overflow-x-auto no-scrollbar">
+          <nav className="flex items-center gap-1 min-w-max">
+            {categories.map((category, idx) => (
+              <div key={idx} className="flex items-center">
+                {idx > 0 && <div className="w-px h-6 bg-white/10 mx-2" />}
+                <div className="flex items-center gap-1">
+                  {category.items.map((item) => {
+                    const active = isActive(item.href);
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        prefetch={true}
+                        onMouseEnter={() => handleHoverPrefetch(item.href)}
+                        onClick={() => setOptimisticHref(item.href)}
+                        className={cn(
+                          'px-3 py-1.5 rounded-md text-[13px] font-medium transition-colors whitespace-nowrap',
+                          active 
+                            ? 'bg-[#13b5ea] text-white' 
+                            : 'text-white/80 hover:bg-white/10 hover:text-white'
+                        )}
+                      >
+                        {item.label}
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </nav>
+        </div>
+      </header>
 
       {/* Mobile top bar */}
-      <div className="md:hidden fixed top-0 inset-x-0 z-40 h-12 bg-[#005A9E] text-white shadow-md flex items-center justify-between px-4">
+      <div className="md:hidden sticky top-0 z-40 h-14 bg-[#0b4a6f] text-white shadow-md flex items-center justify-between px-4">
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded bg-white/20 flex items-center justify-center">
-            <FileText className="w-3.5 h-3.5" />
+          <div className="w-7 h-7 rounded bg-[#13b5ea] flex items-center justify-center font-bold">
+            FA
           </div>
-          <span className="font-semibold text-sm">FaturaAO</span>
+          <span className="font-semibold text-[15px]">FaturaAO</span>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-2">
           <NotificationBell />
-          <button onClick={() => setOpen(!open)} className="p-1.5 rounded hover:bg-white/10">
-            {open ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          <button onClick={() => setOpen(!open)} className="p-2 rounded hover:bg-white/10 transition-colors">
+            {open ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
           </button>
         </div>
       </div>
 
       {/* Mobile menu drawer */}
       {open && (
-        <div className="md:hidden fixed inset-0 top-12 bg-slate-100 z-30 p-3 overflow-y-auto space-y-4 shadow-inner">
-          {categories.map((category, idx) => (
-            <div key={idx} className="bg-white rounded-md border border-slate-200 p-2 shadow-sm">
-              <div className="px-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 mt-1">
-                {category.title}
+        <div className="md:hidden fixed inset-0 top-14 bg-white z-30 overflow-y-auto shadow-inner animate-in slide-in-from-top-2">
+          <div className="p-4 bg-[#f4f5f8] border-b border-slate-200">
+            <div className="text-[14px] font-bold text-slate-800">{company?.name ?? '---'}</div>
+            <div className="text-[12px] text-slate-500 mb-2">NIF: {company?.nif ?? '---'}</div>
+            <CertBadge />
+          </div>
+          <div className="p-4 space-y-6">
+            {categories.map((category, idx) => (
+              <div key={idx} className="space-y-2">
+                <div className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+                  {category.title}
+                </div>
+                <div className="space-y-1">
+                  {category.items.map((item) => {
+                    const Icon = item.icon;
+                    const active = isActive(item.href);
+                    return (
+                      <Link 
+                        key={item.href} 
+                        href={item.href} 
+                        onClick={() => { setOpen(false); setOptimisticHref(item.href); }} 
+                        className={cn(
+                          'flex items-center gap-3 px-3 py-2.5 rounded-md text-[14px] font-medium transition-colors',
+                          active ? 'bg-[#13b5ea]/10 text-[#0b4a6f]' : 'text-slate-600 hover:bg-slate-50'
+                        )}
+                      >
+                        <Icon className={cn("w-5 h-5", active ? "text-[#13b5ea]" : "text-slate-400")} /> {item.label}
+                      </Link>
+                    );
+                  })}
+                </div>
               </div>
-              <div className="space-y-1">
-                {category.items.map((item) => {
-                  const Icon = item.icon;
-                  const active = isActive(item.href);
-                  return (
-                    <Link 
-                      key={item.href} 
-                      href={item.href} 
-                      onClick={() => { setOpen(false); setOptimisticHref(item.href); }} 
-                      className={cn(
-                        'flex items-center gap-3 px-3 py-2.5 rounded-md text-[13px] font-medium',
-                        active ? 'bg-[#0078D4] text-white' : 'text-slate-700 hover:bg-slate-50'
-                      )}
-                    >
-                      <Icon className={cn("w-4 h-4", active ? "text-white" : "text-slate-500")} /> {item.label}
-                    </Link>
-                  );
-                })}
-              </div>
+            ))}
+            <div className="pt-4 border-t border-slate-100">
+              <button onClick={logout} className="w-full flex items-center justify-center gap-2 px-3 py-3 rounded-md text-[14px] font-bold text-red-600 bg-red-50 hover:bg-red-100 transition-colors">
+                <LogOut className="w-4 h-4" /> Terminar Sessão
+              </button>
             </div>
-          ))}
-          <button onClick={logout} className="w-full flex items-center justify-center gap-2 px-3 py-3 mt-4 rounded-md text-[13px] font-bold text-red-700 bg-red-50 border border-red-200 shadow-sm">
-            <LogOut className="w-4 h-4" /> Encerrar Sessão
-          </button>
+          </div>
         </div>
       )}
 
-      {/* Main */}
-      <main className="flex-1 md:ml-56 pt-12 md:pt-0 min-h-screen bg-slate-100">
-        <div className="max-w-[1400px] mx-auto p-4 md:p-6">
-          {children}
-        </div>
+      {/* Main Layout Area */}
+      <main className="flex-1 w-full max-w-[1600px] mx-auto p-4 md:p-8">
+        {children}
       </main>
     </div>
   );
