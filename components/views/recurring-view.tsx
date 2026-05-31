@@ -47,6 +47,24 @@ export default function RecurringView() {
           <p className="text-sm text-muted-foreground">Gerencie avenças e contratos com emissão automática</p>
         </div>
         <div className="flex gap-2">
+          <button 
+            onClick={async () => {
+              if(!confirm('Deseja processar todas as avenças pendentes até hoje? As faturas serão geradas como Rascunho.')) return;
+              try {
+                const res = await fetch('/api/recurring/process', { method: 'POST' });
+                const data = await res.json();
+                if(data.error) throw new Error(data.error);
+                toast.success(data.message);
+                reload();
+              } catch(e:any) {
+                toast.error(e.message);
+              }
+            }} 
+            disabled={loading} 
+            className="ms-btn-secondary bg-[#005A9E] text-white hover:bg-[#004A82] border-transparent hover:border-[#003A62] inline-flex items-center gap-2"
+          >
+            <RefreshCw className="w-4 h-4" /> Processar Lote Pendente
+          </button>
           <button onClick={reload} disabled={loading} className="ms-btn-secondary inline-flex items-center gap-2">
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />} 
             Atualizar
