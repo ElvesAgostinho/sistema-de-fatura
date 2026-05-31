@@ -148,7 +148,7 @@ export async function POST(req: Request) {
       const { data: ins, error: insErr } = await admin.from('invoices').insert({
         company_id: companyId, client_id, invoice_number: sequence, document_type: docType,
         subtotal, tax, total, status: 'issued', hash, signature,
-        signature_key_id: signatureKeyId,
+        signature_key_id: signatureKeyId, previous_hash: prevHash || null,
         tax_exempt: !!tax_exempt, tax_exemption_reason: tax_exempt ? tax_exemption_reason : null,
         related_document: related_document || null, created_by: ctx.user.id, issued_at: issuedAt,
         client_name: client.name, client_nif: client.nif, client_address: client.address,
