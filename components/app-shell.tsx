@@ -140,7 +140,7 @@ export default function AppShell({ children, user, company, isPlatformAdmin, rol
           <div className="w-6 h-6 rounded bg-white/20 text-white flex items-center justify-center shadow-sm">
             <FileText className="w-3.5 h-3.5" />
           </div>
-          <span className="font-semibold text-sm tracking-wide">Primavera ERP</span>
+          <span className="font-semibold text-sm tracking-wide">FaturaAO</span>
         </div>
         <div className="px-3 py-3 border-b border-slate-200 bg-white">
           <div className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-0.5">Entidade Ativa</div>
@@ -201,7 +201,7 @@ export default function AppShell({ children, user, company, isPlatformAdmin, rol
           <div className="w-6 h-6 rounded bg-white/20 flex items-center justify-center">
             <FileText className="w-3.5 h-3.5" />
           </div>
-          <span className="font-semibold text-sm">Primavera ERP</span>
+          <span className="font-semibold text-sm">FaturaAO</span>
         </div>
         <div className="flex items-center gap-1">
           <NotificationBell />
