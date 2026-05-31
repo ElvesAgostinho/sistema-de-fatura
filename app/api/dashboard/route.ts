@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import { getCurrentUserContext } from '@/lib/auth';
 import { getCachedOrFetch } from '@/lib/redis';
+import { CacheKeys, CacheTTL } from '@/lib/cache-keys';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,7 +14,7 @@ export async function GET() {
   const admin = createAdminClient();
   const companyId = ctx.profile.company_id;
 
-  const cacheKey = `dashboard:${companyId}`;
+  const cacheKey = CacheKeys.dashboardStats(companyId);
 
   const dashboardData = await getCachedOrFetch(cacheKey, async () => {
     const now = new Date();
@@ -115,7 +116,7 @@ export async function GET() {
       unpaid: { list: unpaidList, total: unpaidTotal, count: unpaidList.length },
       lowStock,
     };
-  }, 60); // 60 seconds TTL cache
+  }, CacheTTL.dashboard);
 
   return NextResponse.json(dashboardData);
 }

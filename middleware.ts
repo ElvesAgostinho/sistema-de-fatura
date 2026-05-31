@@ -49,7 +49,8 @@ export async function middleware(request: NextRequest) {
   // ── 2. CORS — only for API routes ────────────────────────────────────────────
   if (path.startsWith('/api/')) {
     const origin = request.headers.get('origin');
-    const isAllowedOrigin = !origin || ALLOWED_ORIGINS.includes(origin);
+    const reqOrigin = request.nextUrl.origin;
+    const isAllowedOrigin = !origin || origin === reqOrigin || ALLOWED_ORIGINS.includes(origin);
 
     // Preflight
     if (request.method === 'OPTIONS') {
@@ -66,9 +67,13 @@ export async function middleware(request: NextRequest) {
     }
 
     // Block cross-origin mutation requests
+    // Bypass this strict check in development to allow local testing (e.g. from ngrok or postman)
+    const isDev = process.env.NODE_ENV === 'development';
+    
     if (
       origin &&
       !isAllowedOrigin &&
+      !isDev &&
       ['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method)
     ) {
       return jsonResponse({ error: 'CORS: origin not allowed' }, 403, {
