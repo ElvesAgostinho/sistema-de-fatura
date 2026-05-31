@@ -127,33 +127,32 @@ export default function AppShell({ children, user, company, isPlatformAdmin, rol
   const effectiveHref = optimisticHref ?? activeHref;
   const isActive = (href: string) => effectiveHref === href;
 
-  return (
-    <div className="min-h-screen flex bg-secondary/30">
+    <div className="min-h-screen flex bg-slate-100">
       <NavProgress />
       {/* Sidebar desktop */}
-      <aside className="hidden md:flex w-64 flex-col bg-card border-r border-border fixed h-full">
-        <div className="h-16 px-5 flex items-center gap-2 border-b border-border">
-          <div className="w-8 h-8 rounded bg-primary text-primary-foreground flex items-center justify-center">
-            <FileText className="w-5 h-5" />
+      <aside className="hidden md:flex w-56 flex-col bg-[#F3F4F6] border-r border-slate-300 shadow-[2px_0_5px_rgba(0,0,0,0.02)] fixed h-full z-20">
+        <div className="h-12 px-4 flex items-center gap-2 bg-[#005A9E] text-white border-b border-[#004A82]">
+          <div className="w-6 h-6 rounded bg-white/20 text-white flex items-center justify-center shadow-sm">
+            <FileText className="w-3.5 h-3.5" />
           </div>
-          <span className="font-semibold">FaturaAO</span>
+          <span className="font-semibold text-sm tracking-wide">Primavera ERP</span>
         </div>
-        <div className="px-3 py-4 border-b border-border">
-          <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Empresa</div>
-          <div className="text-sm font-semibold truncate">{company?.name ?? '---'}</div>
-          <div className="text-xs font-mono text-muted-foreground">NIF: {company?.nif ?? '---'}</div>
+        <div className="px-3 py-3 border-b border-slate-200 bg-white">
+          <div className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-0.5">Entidade Ativa</div>
+          <div className="text-[13px] font-bold text-slate-800 truncate">{company?.name ?? '---'}</div>
+          <div className="text-[11px] font-mono text-slate-500 mb-1">NIF: {company?.nif ?? '---'}</div>
           <CertBadge />
         </div>
-        <div className="pt-3 pb-1">
+        <div className="pt-2 pb-1 px-2">
           <CommandPalette />
         </div>
-        <nav className="flex-1 overflow-y-auto p-3 space-y-4">
+        <nav className="flex-1 overflow-y-auto p-2 space-y-3">
           {categories.map((category, idx) => (
             <div key={idx}>
-              <div className="px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1.5">
+              <div className="px-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">
                 {category.title}
               </div>
-              <div className="space-y-1">
+              <div className="space-y-0.5">
                 {category.items.map((item) => {
                   const Icon = item.icon;
                   const active = isActive(item.href);
@@ -165,11 +164,13 @@ export default function AppShell({ children, user, company, isPlatformAdmin, rol
                       onMouseEnter={() => handleHoverPrefetch(item.href)}
                       onClick={() => setOptimisticHref(item.href)}
                       className={cn(
-                        'flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors',
-                        active ? 'bg-primary text-primary-foreground' : 'text-foreground hover:bg-secondary'
+                        'flex items-center gap-2.5 px-2 py-1.5 rounded-sm text-[12.5px] font-medium transition-colors border border-transparent',
+                        active 
+                          ? 'bg-[#0078D4] text-white shadow-sm border-[#005A9E]' 
+                          : 'text-slate-700 hover:bg-slate-200/60 hover:border-slate-300'
                       )}
                     >
-                      <Icon className="w-4 h-4" />
+                      <Icon className={cn("w-4 h-4", active ? "text-white" : "text-slate-500")} />
                       {item.label}
                     </Link>
                   );
@@ -178,28 +179,28 @@ export default function AppShell({ children, user, company, isPlatformAdmin, rol
             </div>
           ))}
         </nav>
-        <div className="p-3 border-t border-border space-y-2">
+        <div className="p-2 border-t border-slate-300 bg-slate-200/50 space-y-1">
           <div className="flex items-center justify-between px-2 py-1">
-            <div className="text-xs text-muted-foreground truncate flex-1">{user.email}</div>
+            <div className="text-[11px] text-slate-600 font-medium truncate flex-1">{user.email}</div>
             <NotificationBell />
           </div>
-          <button onClick={logout} className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium text-destructive hover:bg-destructive/10 transition">
-            <LogOut className="w-4 h-4" /> Sair
+          <button onClick={logout} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-sm text-[12.5px] font-medium text-red-700 hover:bg-red-100 border border-transparent hover:border-red-200 transition">
+            <LogOut className="w-3.5 h-3.5" /> Encerrar Sessão
           </button>
         </div>
       </aside>
 
       {/* Mobile top bar */}
-      <div className="md:hidden fixed top-0 inset-x-0 z-40 h-14 bg-card border-b border-border flex items-center justify-between px-4">
+      <div className="md:hidden fixed top-0 inset-x-0 z-40 h-12 bg-[#005A9E] text-white shadow-md flex items-center justify-between px-4">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded bg-primary text-primary-foreground flex items-center justify-center">
-            <FileText className="w-4 h-4" />
+          <div className="w-6 h-6 rounded bg-white/20 flex items-center justify-center">
+            <FileText className="w-3.5 h-3.5" />
           </div>
-          <span className="font-semibold">FaturaAO</span>
+          <span className="font-semibold text-sm">Primavera ERP</span>
         </div>
         <div className="flex items-center gap-1">
           <NotificationBell />
-          <button onClick={() => setOpen(!open)} className="p-2 rounded hover:bg-secondary">
+          <button onClick={() => setOpen(!open)} className="p-1.5 rounded hover:bg-white/10">
             {open ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
         </div>
@@ -207,10 +208,10 @@ export default function AppShell({ children, user, company, isPlatformAdmin, rol
 
       {/* Mobile menu drawer */}
       {open && (
-        <div className="md:hidden fixed inset-0 top-14 bg-background z-30 p-4 overflow-y-auto space-y-4">
+        <div className="md:hidden fixed inset-0 top-12 bg-slate-100 z-30 p-3 overflow-y-auto space-y-4 shadow-inner">
           {categories.map((category, idx) => (
-            <div key={idx}>
-              <div className="px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1.5">
+            <div key={idx} className="bg-white rounded-md border border-slate-200 p-2 shadow-sm">
+              <div className="px-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 mt-1">
                 {category.title}
               </div>
               <div className="space-y-1">
@@ -223,26 +224,26 @@ export default function AppShell({ children, user, company, isPlatformAdmin, rol
                       href={item.href} 
                       onClick={() => { setOpen(false); setOptimisticHref(item.href); }} 
                       className={cn(
-                        'flex items-center gap-3 px-3 py-3 rounded-md text-sm font-medium',
-                        active ? 'bg-primary text-primary-foreground' : 'hover:bg-secondary'
+                        'flex items-center gap-3 px-3 py-2.5 rounded-md text-[13px] font-medium',
+                        active ? 'bg-[#0078D4] text-white' : 'text-slate-700 hover:bg-slate-50'
                       )}
                     >
-                      <Icon className="w-4 h-4" /> {item.label}
+                      <Icon className={cn("w-4 h-4", active ? "text-white" : "text-slate-500")} /> {item.label}
                     </Link>
                   );
                 })}
               </div>
             </div>
           ))}
-          <button onClick={logout} className="w-full flex items-center gap-2 px-3 py-3 mt-4 rounded-md text-sm font-medium text-destructive hover:bg-destructive/10">
-            <LogOut className="w-4 h-4" /> Sair
+          <button onClick={logout} className="w-full flex items-center justify-center gap-2 px-3 py-3 mt-4 rounded-md text-[13px] font-bold text-red-700 bg-red-50 border border-red-200 shadow-sm">
+            <LogOut className="w-4 h-4" /> Encerrar Sessão
           </button>
         </div>
       )}
 
       {/* Main */}
-      <main className="flex-1 md:ml-64 pt-14 md:pt-0 min-h-screen">
-        <div className="max-w-[1200px] mx-auto p-4 md:p-8">
+      <main className="flex-1 md:ml-56 pt-12 md:pt-0 min-h-screen bg-slate-100">
+        <div className="max-w-[1400px] mx-auto p-4 md:p-6">
           {children}
         </div>
       </main>
