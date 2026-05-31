@@ -12,50 +12,66 @@ import { CommandPalette } from './command-palette';
 import CertBadge from './cert-badge';
 import NavProgress from './nav-progress';
 
-const MENU_CATEGORIES = [
-  {
-    title: 'Vendas',
-    items: [
-      { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-      { href: '/invoices/new', label: 'Emitir Documento', icon: FilePlus },
-      { href: '/invoices', label: 'Documentos Emitidos', icon: FileText },
-      { href: '/recurring', label: 'Avenças', icon: Calendar },
-      { href: '/pos-close', label: 'Fecho do Dia', icon: Calculator },
-      { href: '/clients', label: 'Clientes', icon: Users },
-    ]
-  },
-  {
-    title: 'Compras',
-    items: [
-      { href: '/purchases/new', label: 'Registar Compra', icon: FilePlus },
-      { href: '/purchases', label: 'Compras', icon: FileText },
-      { href: '/suppliers', label: 'Fornecedores', icon: Users },
-      { href: '/products', label: 'Produtos', icon: Package },
-    ]
+const getXeroMenus = (role?: string, isPlatformAdmin?: boolean) => {
+  const isCompanyAdmin = role === 'admin' || isPlatformAdmin;
+  
+  const baseMenus = [
+    {
+      title: 'Painel',
+      href: '/dashboard',
+      items: []
+    },
+    {
+      title: 'Negócios',
+      items: [
+        { href: '/invoices', label: 'Faturas de Clientes' },
+        { href: '/invoices/new', label: 'Nova Fatura' },
+        { href: '/recurring', label: 'Avenças' },
+        { href: '/pos-close', label: 'Fecho de Caixa' },
+        { divider: true },
+        { href: '/purchases', label: 'Faturas de Fornecedores' },
+        { href: '/purchases/new', label: 'Nova Compra' },
+        { divider: true },
+        { href: '/products', label: 'Produtos e Serviços' },
+      ]
+    },
+    {
+      title: 'Contactos',
+      items: [
+        { href: '/clients', label: 'Clientes' },
+        { href: '/suppliers', label: 'Fornecedores' },
+      ]
+    }
+  ];
+
+  if (isCompanyAdmin) {
+    baseMenus.splice(2, 0, {
+      title: 'Contabilidade',
+      items: [
+        { href: '/reports', label: 'Relatórios' },
+        { href: '/taxes', label: 'Impostos e SAF-T' },
+        { href: '/audit', label: 'Auditoria' },
+        { href: '/settings', label: 'Configurações Avançadas' },
+      ]
+    });
   }
-];
 
-const COMPANY_ADMIN_CATEGORY = {
-  title: 'Gestão',
-  items: [
-    { href: '/reports', label: 'Relatórios', icon: BarChart3 },
-    { href: '/taxes', label: 'Impostos & SAF-T', icon: Banknote },
-    { href: '/audit', label: 'Auditoria', icon: ClipboardList },
-    { href: '/settings', label: 'Configurações', icon: Settings },
-  ]
+  // Se for apenas caixa, limitar opções no Negócios
+  if (role === 'caixa') {
+    const negociosIndex = baseMenus.findIndex(m => m.title === 'Negócios');
+    if (negociosIndex !== -1) {
+      baseMenus[negociosIndex].items = [
+        { href: '/invoices', label: 'Faturas de Clientes' },
+        { href: '/invoices/new', label: 'Nova Fatura' },
+        { href: '/pos-close', label: 'Fecho de Caixa' },
+        { divider: true },
+        { href: '/products', label: 'Consulta de Artigos' },
+      ];
+    }
+  }
+
+  return baseMenus;
 };
-
-const SUPER_ADMIN_CATEGORY = {
-  title: 'SaaS',
-  items: [
-    { href: '/admin/approvals', label: 'Aprovações', icon: UserCheck },
-  ]
-};
-
-// Reusable icons
-function ClipboardList(props: any) {
-  return <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></svg>
-}
 
 export default function AppShell({ children, user, company, isPlatformAdmin, role }: {
   children: React.ReactNode;
@@ -65,35 +81,12 @@ export default function AppShell({ children, user, company, isPlatformAdmin, rol
   role?: string;
 }) {
   const isCompanyAdmin = role === 'admin' || isPlatformAdmin;
-  const categories = [];
-  
-  if (role === 'caixa') {
-    categories.push({
-      title: 'Operações de Caixa',
-      items: [
-        { href: '/invoices/new', label: 'Emitir Fatura (POS)', icon: FilePlus },
-        { href: '/invoices', label: 'Documentos Emitidos', icon: FileText },
-        { href: '/pos-close', label: 'Fecho do Dia', icon: Calculator },
-        { href: '/clients', label: 'Clientes', icon: Users },
-        { href: '/products', label: 'Consulta de Artigos', icon: Package },
-      ]
-    });
-  } else {
-    categories.push(...MENU_CATEGORIES);
-  }
-
-  if (isCompanyAdmin) categories.push(COMPANY_ADMIN_CATEGORY);
-  if (isPlatformAdmin) categories.push(SUPER_ADMIN_CATEGORY);
-  const NAV = categories.flatMap(c => c.items);
+  const XERO_MENUS = getXeroMenus(role, isPlatformAdmin);
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
-
-  const handleHoverPrefetch = (href: string) => {
-    router.prefetch(href);
-  };
-
   const [optimisticHref, setOptimisticHref] = useState<string | null>(null);
+
   useEffect(() => { setOptimisticHref(null); }, [pathname]);
 
   const logout = async () => {
@@ -107,21 +100,11 @@ export default function AppShell({ children, user, company, isPlatformAdmin, rol
     }
   };
 
-  const activeHref = (() => {
-    if (!pathname) return '';
-    let best = '';
-    for (const item of NAV) {
-      if (pathname === item.href || pathname.startsWith(item.href + '/')) {
-        if (item.href.length > best.length) best = item.href;
-      }
-    }
-    return best;
-  })();
-
-  const isActive = (href: string) => {
+  const isActive = (href?: string) => {
+    if (!href) return false;
     if (optimisticHref) return href === optimisticHref;
     if (href === '/dashboard' && pathname === '/dashboard') return true;
-    if (href !== '/dashboard' && activeHref === href) return true;
+    if (href !== '/dashboard' && pathname.startsWith(href)) return true;
     return false;
   };
 
@@ -129,81 +112,126 @@ export default function AppShell({ children, user, company, isPlatformAdmin, rol
     <div className="min-h-screen flex flex-col bg-[#F4F5F8]">
       <NavProgress />
       
-      {/* Topbar Desktop */}
-      <header className="hidden md:flex flex-col bg-[#0b4a6f] text-white sticky top-0 z-40 shadow-sm">
-        {/* Superior Topbar (Logo & Perfil) */}
-        <div className="flex items-center justify-between px-6 h-14">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded bg-[#13b5ea] text-white flex items-center justify-center font-bold">
-              FA
+      {/* Topbar Desktop (Xero Style) */}
+      <header className="hidden md:flex flex-col bg-[#0b4a6f] text-white sticky top-0 z-40 shadow">
+        <div className="flex items-center justify-between px-4 h-12">
+          
+          {/* Left Side: Logo & Navigation */}
+          <div className="flex items-center h-full">
+            {/* Logo */}
+            <div className="flex items-center gap-2 mr-8">
+              <div className="w-7 h-7 rounded bg-[#13b5ea] text-white flex items-center justify-center font-bold text-sm">
+                FA
+              </div>
+              <span className="font-semibold text-lg tracking-tight">FaturaAO</span>
             </div>
-            <span className="font-semibold text-lg tracking-wide">FaturaAO</span>
-            <div className="ml-4 pl-4 border-l border-white/20">
-              <div className="text-[13px] font-bold">{company?.name ?? '---'}</div>
-              <div className="text-[11px] text-white/70">NIF: {company?.nif ?? '---'}</div>
-            </div>
-            <div className="ml-4">
-              <CertBadge />
-            </div>
+
+            {/* Navigation Menus */}
+            <nav className="flex items-center h-full gap-1">
+              {XERO_MENUS.map((menu, idx) => {
+                const hasItems = menu.items && menu.items.length > 0;
+                const isMenuBtnActive = menu.href ? isActive(menu.href) : menu.items?.some(i => !i.divider && isActive(i.href));
+
+                if (!hasItems) {
+                  return (
+                    <Link
+                      key={idx}
+                      href={menu.href!}
+                      className={cn(
+                        'h-full px-4 flex items-center text-sm font-medium transition-colors border-b-2',
+                        isMenuBtnActive ? 'border-[#13b5ea] text-white bg-[#093c5a]' : 'border-transparent text-white/90 hover:bg-[#093c5a]'
+                      )}
+                    >
+                      {menu.title}
+                    </Link>
+                  );
+                }
+
+                return (
+                  <div key={idx} className="relative group h-full">
+                    <button className={cn(
+                      'h-full px-4 flex items-center gap-1 text-sm font-medium transition-colors border-b-2',
+                      isMenuBtnActive ? 'border-[#13b5ea] text-white bg-[#093c5a]' : 'border-transparent text-white/90 group-hover:bg-[#093c5a]'
+                    )}>
+                      {menu.title}
+                      <ChevronDown className="w-3.5 h-3.5 opacity-70" />
+                    </button>
+
+                    {/* Dropdown menu */}
+                    <div className="absolute left-0 top-full hidden group-hover:block w-56 pt-1">
+                      <div className="bg-white rounded-b-md shadow-lg border border-slate-200 py-2 overflow-hidden text-slate-800">
+                        {menu.items.map((item, i) => {
+                          if (item.divider) return <div key={i} className="my-1.5 border-t border-slate-100" />;
+                          return (
+                            <Link
+                              key={i}
+                              href={item.href!}
+                              onClick={() => setOptimisticHref(item.href!)}
+                              className={cn(
+                                'block px-4 py-2 text-sm transition-colors',
+                                isActive(item.href) ? 'bg-[#13b5ea]/10 text-[#13b5ea] font-medium' : 'hover:bg-slate-50'
+                              )}
+                            >
+                              {item.label}
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </nav>
           </div>
           
-          <div className="flex items-center gap-4">
+          {/* Right Side: Tools & Profile */}
+          <div className="flex items-center gap-2 h-full">
+            <Link href="/invoices/new" className="p-1.5 hover:bg-[#093c5a] rounded-full transition-colors text-white" title="Adicionar Rápido">
+              <Plus className="w-5 h-5" />
+            </Link>
             <CommandPalette />
             <NotificationBell />
-            <div className="flex items-center gap-3 pl-4 border-l border-white/20">
-              <div className="text-[13px] font-medium hidden lg:block">{user.email}</div>
-              <button onClick={logout} className="p-1.5 hover:bg-white/10 rounded-full transition-colors text-white" title="Encerrar Sessão">
-                <LogOut className="w-5 h-5" />
+            
+            {/* User Profile Dropdown */}
+            <div className="relative group h-full flex items-center ml-2 border-l border-white/20 pl-4">
+              <button className="flex items-center gap-2 h-full hover:bg-[#093c5a] px-2 -mx-2 rounded transition-colors">
+                <div className="w-7 h-7 rounded-full bg-[#13b5ea] text-white flex items-center justify-center text-xs font-bold">
+                  {user.email.substring(0,2).toUpperCase()}
+                </div>
+                <div className="flex flex-col items-start text-left">
+                  <span className="text-[12px] font-bold leading-tight">{company?.name ?? '---'}</span>
+                  <span className="text-[10px] text-white/70 leading-tight">NIF: {company?.nif}</span>
+                </div>
+                <ChevronDown className="w-3.5 h-3.5 opacity-70 ml-1" />
               </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Inferior Topbar (Menu Navigation) */}
-        <div className="flex items-center px-6 h-12 bg-[#093c5a] overflow-x-auto no-scrollbar">
-          <nav className="flex items-center gap-1 min-w-max">
-            {categories.map((category, idx) => (
-              <div key={idx} className="flex items-center">
-                {idx > 0 && <div className="w-px h-6 bg-white/10 mx-2" />}
-                <div className="flex items-center gap-1">
-                  {category.items.map((item) => {
-                    const active = isActive(item.href);
-                    return (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        prefetch={true}
-                        onMouseEnter={() => handleHoverPrefetch(item.href)}
-                        onClick={() => setOptimisticHref(item.href)}
-                        className={cn(
-                          'px-3 py-1.5 rounded-md text-[13px] font-medium transition-colors whitespace-nowrap',
-                          active 
-                            ? 'bg-[#13b5ea] text-white' 
-                            : 'text-white/80 hover:bg-white/10 hover:text-white'
-                        )}
-                      >
-                        {item.label}
-                      </Link>
-                    );
-                  })}
+              
+              <div className="absolute right-0 top-full hidden group-hover:block w-64 pt-1">
+                <div className="bg-white rounded-b-md shadow-lg border border-slate-200 overflow-hidden text-slate-800">
+                  <div className="px-4 py-3 border-b border-slate-100 bg-slate-50">
+                    <div className="text-sm font-bold truncate">{user.email}</div>
+                    <div className="text-xs text-slate-500 capitalize">{role === 'admin' ? 'Administrador' : 'Operador'}</div>
+                    <div className="mt-2"><CertBadge /></div>
+                  </div>
+                  <div className="py-2">
+                    <Link href="/settings" className="block px-4 py-2 text-sm hover:bg-slate-50 flex items-center gap-2 text-slate-700"><Settings className="w-4 h-4 text-slate-400" /> Definições da conta</Link>
+                    <button onClick={logout} className="w-full text-left px-4 py-2 text-sm hover:bg-slate-50 flex items-center gap-2 text-slate-700"><LogOut className="w-4 h-4 text-slate-400" /> Terminar sessão</button>
+                  </div>
                 </div>
               </div>
-            ))}
-          </nav>
+            </div>
+          </div>
         </div>
       </header>
 
       {/* Mobile top bar */}
       <div className="md:hidden sticky top-0 z-40 h-14 bg-[#0b4a6f] text-white shadow-md flex items-center justify-between px-4">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded bg-[#13b5ea] flex items-center justify-center font-bold">
-            FA
-          </div>
+          <div className="w-7 h-7 rounded bg-[#13b5ea] flex items-center justify-center font-bold">FA</div>
           <span className="font-semibold text-[15px]">FaturaAO</span>
         </div>
         <div className="flex items-center gap-2">
           <NotificationBell />
-          <button onClick={() => setOpen(!open)} className="p-2 rounded hover:bg-white/10 transition-colors">
+          <button onClick={() => setOpen(!open)} className="p-2 rounded hover:bg-[#093c5a] transition-colors">
             {open ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
           </button>
         </div>
@@ -218,26 +246,28 @@ export default function AppShell({ children, user, company, isPlatformAdmin, rol
             <CertBadge />
           </div>
           <div className="p-4 space-y-6">
-            {categories.map((category, idx) => (
+            {XERO_MENUS.map((menu, idx) => (
               <div key={idx} className="space-y-2">
-                <div className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">
-                  {category.title}
-                </div>
+                {menu.href ? (
+                  <Link href={menu.href} onClick={() => setOpen(false)} className={cn("block text-[15px] font-bold mb-2", isActive(menu.href) ? "text-[#13b5ea]" : "text-slate-800")}>{menu.title}</Link>
+                ) : (
+                  <div className="text-[15px] font-bold text-slate-800 mb-2 border-b pb-1">{menu.title}</div>
+                )}
                 <div className="space-y-1">
-                  {category.items.map((item) => {
-                    const Icon = item.icon;
+                  {menu.items?.map((item, i) => {
+                    if (item.divider) return null;
                     const active = isActive(item.href);
                     return (
                       <Link 
-                        key={item.href} 
-                        href={item.href} 
-                        onClick={() => { setOpen(false); setOptimisticHref(item.href); }} 
+                        key={i} 
+                        href={item.href!} 
+                        onClick={() => { setOpen(false); setOptimisticHref(item.href!); }} 
                         className={cn(
-                          'flex items-center gap-3 px-3 py-2.5 rounded-md text-[14px] font-medium transition-colors',
+                          'flex items-center gap-3 px-3 py-2 rounded-md text-[14px] font-medium transition-colors',
                           active ? 'bg-[#13b5ea]/10 text-[#0b4a6f]' : 'text-slate-600 hover:bg-slate-50'
                         )}
                       >
-                        <Icon className={cn("w-5 h-5", active ? "text-[#13b5ea]" : "text-slate-400")} /> {item.label}
+                        {item.label}
                       </Link>
                     );
                   })}
@@ -254,7 +284,7 @@ export default function AppShell({ children, user, company, isPlatformAdmin, rol
       )}
 
       {/* Main Layout Area */}
-      <main className="flex-1 w-full max-w-[1600px] mx-auto p-4 md:p-8">
+      <main className="flex-1 w-full max-w-6xl mx-auto p-4 md:py-8 md:px-0">
         {children}
       </main>
     </div>
