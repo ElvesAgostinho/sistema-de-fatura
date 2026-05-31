@@ -1,16 +1,20 @@
 import { NextResponse } from 'next/server';
-import { requireUser } from '@/lib/auth';
-import { getCompanyDb } from '@/lib/supabase/db';
+import { getCurrentUserContext } from '@/lib/auth';
+import { createAdminClient } from '@/lib/supabase/server';
+import { ApiResponse } from '@/lib/api-response';
+
+export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
   try {
-    const { profile } = await requireUser();
-    if (!profile.company_id) return NextResponse.json({ error: 'No company' }, { status: 400 });
-    if (profile.role !== 'admin' && profile.role !== 'contabilista') {
+    const ctx = await getCurrentUserContext();
+    if (!ctx?.profile) return ApiResponse.unauthorized();
+    
+    if (ctx.profile.role !== 'admin' && ctx.profile.role !== 'contabilista') {
       return NextResponse.json({ error: 'Permissões insuficientes' }, { status: 403 });
     }
 
-    const db = getCompanyDb();
+    const db = createAdminClient();
     
     // 1. Obter todas as avenças pendentes de processamento até hoje
     const today = new Date().toISOString().split('T')[0];
@@ -18,7 +22,7 @@ export async function POST(req: Request) {
     const { data: recurrings, error: fetchErr } = await db
       .from('recurring_invoices')
       .select('*, client:clients(id, name, nif)')
-      .eq('company_id', profile.company_id)
+      .eq('company_id', ctx.profile.company_id)
       .eq('is_active', true)
       .lte('next_issue_date', today);
 
@@ -40,7 +44,7 @@ export async function POST(req: Request) {
 
       invoicesToInsert.push({
         id: invoiceId,
-        company_id: profile.company_id,
+        company_id: ctx.profile.company_id,
         client_id: rec.client_id,
         number: invoiceNumber,
         issue_date: today,
