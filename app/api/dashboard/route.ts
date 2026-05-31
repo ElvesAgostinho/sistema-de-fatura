@@ -8,6 +8,8 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
   const ctx = await getCurrentUserContext();
   if (!ctx?.profile) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (ctx.profile.role === 'caixa') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  
   const admin = createAdminClient();
   const companyId = ctx.profile.company_id;
 

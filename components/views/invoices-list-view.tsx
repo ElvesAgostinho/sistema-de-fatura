@@ -160,47 +160,58 @@ export default function InvoicesListView() {
       )}
 
       <div className="ms-card overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-secondary/60">
-              <tr className="text-left text-xs uppercase text-muted-foreground">
-                <th className="py-3 px-4">Número</th>
-                <th className="py-3 px-4">Cliente</th>
-                <th className="py-3 px-4">NIF</th>
-                <th className="py-3 px-4">Data</th>
-                <th className="py-3 px-4">Estado</th>
-                <th className="py-3 px-4 text-right">Total</th>
-                <th className="py-3 px-4 text-right">Ações</th>
+        <div className="flex-1 overflow-x-auto rounded-md border bg-card">
+          <table className="w-full text-[13px]">
+            <thead className="bg-muted/50 sticky top-0 backdrop-blur-sm z-10 border-b">
+              <tr className="text-left font-medium text-muted-foreground">
+                <th className="py-2.5 px-3">Número</th>
+                <th className="py-2.5 px-3">Cliente</th>
+                <th className="py-2.5 px-3">Data</th>
+                <th className="py-2.5 px-3">Total</th>
+                <th className="py-2.5 px-3">Em Dívida</th>
+                <th className="py-2.5 px-3">Estado</th>
+                <th className="py-2.5 px-3">Pagamento</th>
+                <th className="py-2.5 px-3 text-right">Ações</th>
               </tr>
             </thead>
-            <tbody>
-              {loading && !data ? (
-                <tr><td colSpan={7} className="py-10 text-center text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin mx-auto" /></td></tr>
+            <tbody className="divide-y divide-border">
+              {loading || validating ? (
+                <tr><td colSpan={8} className="py-10 text-center"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground mx-auto" /></td></tr>
               ) : invoices.length === 0 ? (
-                <tr><td colSpan={7} className="py-10 text-center text-muted-foreground">Nenhuma fatura encontrada</td></tr>
+                <tr><td colSpan={8} className="py-10 text-center text-muted-foreground">Nenhuma fatura encontrada.</td></tr>
               ) : (
-                invoices.map((inv) => (
-                  <tr key={inv.id} className="border-t hover:bg-secondary/40 transition-colors">
-                    <td className="py-3 px-4"><Link href={`/invoices/${inv.id}`} className="font-mono text-primary font-medium hover:underline">{inv.invoice_number}</Link></td>
-                    <td className="py-3 px-4">{inv.client?.name ?? '-'}</td>
-                    <td className="py-3 px-4 font-mono text-xs text-muted-foreground">{inv.client?.nif ?? '-'}</td>
-                    <td className="py-3 px-4 text-muted-foreground">{formatDateTime(inv.issued_at)}</td>
-                    <td className="py-3 px-4">
-                      {inv.status === 'issued' ? (
-                        <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-success/10 text-success font-medium"><CheckCircle2 className="w-3 h-3" /> Emitida</span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-destructive/10 text-destructive font-medium"><XCircle className="w-3 h-3" /> Cancelada</span>
-                      )}
-                    </td>
-                    <td className="py-3 px-4 text-right font-mono font-semibold">{formatAOA(inv.total)}</td>
-                    <td className="py-3 px-4 text-right">
-                      <div className="inline-flex gap-1">
-                        <Link href={`/invoices/${inv.id}`} className="p-2 rounded hover:bg-secondary text-muted-foreground hover:text-foreground" title="Ver"><FileText className="w-4 h-4" /></Link>
-                        <button onClick={() => onDownloadPdf(inv.id, inv.invoice_number.replace(/[^a-zA-Z0-9]/g, '_'))} className="p-2 rounded hover:bg-secondary text-muted-foreground hover:text-foreground" title="PDF"><Download className="w-4 h-4" /></button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                invoices.map((inv) => {
+                  const clientName = inv.client?.name || 'Consumidor Final';
+                  const debt = inv.total - (inv.amount_paid ?? 0);
+                  const isCancelled = inv.status === 'cancelled';
+                  return (
+                    <tr key={inv.id} className="hover:bg-muted/40 even:bg-muted/10 transition-colors">
+                      <td className="py-2 px-3">
+                        <Link href={`/invoices/${inv.id}`} className="font-mono font-medium text-primary hover:underline">
+                          {inv.invoice_number}
+                        </Link>
+                      </td>
+                      <td className="py-2 px-3 font-medium">{clientName}</td>
+                      <td className="py-2 px-3 text-muted-foreground">{formatDateTime(inv.issued_at)}</td>
+                      <td className="py-2 px-3 font-mono">{formatAOA(inv.total)}</td>
+                      <td className="py-2 px-3 font-mono">
+                        {!isCancelled && debt > 0 ? <span className="text-warning font-medium">{formatAOA(debt)}</span> : !isCancelled ? <span className="text-success">0,00</span> : <span className="text-muted-foreground">-</span>}
+                      </td>
+                      <td className="py-2 px-3">
+                        {isCancelled ? <span className="inline-flex text-[10px] uppercase font-bold bg-destructive/10 text-destructive px-1.5 py-0.5 rounded">Cancelada</span> : <span className="inline-flex text-[10px] uppercase font-bold bg-primary/10 text-primary px-1.5 py-0.5 rounded">Emitida</span>}
+                      </td>
+                      <td className="py-2 px-3">
+                        {isCancelled ? <span className="text-muted-foreground">-</span> : inv.payment_status === 'pago' ? <span className="inline-flex text-[10px] uppercase font-bold bg-success/10 text-success px-1.5 py-0.5 rounded">Pago</span> : inv.payment_status === 'parcial' ? <span className="inline-flex text-[10px] uppercase font-bold bg-warning/10 text-warning px-1.5 py-0.5 rounded">Parcial</span> : <span className="inline-flex text-[10px] uppercase font-bold bg-secondary text-muted-foreground px-1.5 py-0.5 rounded">Pendente</span>}
+                      </td>
+                      <td className="py-2 px-3 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <Link href={`/invoices/${inv.id}`} className="p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-foreground" title="Ver"><FileText className="w-4 h-4" /></Link>
+                          <button onClick={() => onDownloadPdf(inv.id, inv.invoice_number.replace(/[^a-zA-Z0-9]/g, '_'))} className="p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-foreground" title="PDF"><Download className="w-4 h-4" /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

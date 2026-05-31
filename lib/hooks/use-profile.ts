@@ -4,7 +4,7 @@ export type UserProfile = {
   id: string;
   email: string;
   company_id: string;
-  role: 'admin' | 'user';
+  role: 'admin' | 'user' | 'caixa' | 'contabilista';
   is_platform_admin: boolean;
   full_name?: string;
 };

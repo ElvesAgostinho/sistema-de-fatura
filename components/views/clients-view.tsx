@@ -100,41 +100,45 @@ export default function ClientsView() {
         ) : showEmpty ? (
           <div className="p-10 text-center text-muted-foreground">Nenhum cliente encontrado</div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-secondary/60">
-                <tr className="text-left text-xs uppercase text-muted-foreground">
-                  <th className="py-3 px-4">Cliente</th>
-                  <th className="py-3 px-4">NIF</th>
-                  <th className="py-3 px-4">Contato</th>
-                  <th className="py-3 px-4">Estado</th>
-                  <th className="py-3 px-4 text-right">Ações</th>
+          <div className="flex-1 overflow-x-auto rounded-md border bg-card">
+            <table className="w-full text-[13px]">
+              <thead className="bg-muted/50 sticky top-0 backdrop-blur-sm z-10 border-b">
+                <tr className="text-left font-medium text-muted-foreground">
+                  <th className="py-2.5 px-3">Cliente</th>
+                  <th className="py-2.5 px-3">NIF</th>
+                  <th className="py-2.5 px-3">Contato</th>
+                  <th className="py-2.5 px-3">Estado</th>
+                  <th className="py-2.5 px-3 text-right">Ações</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-border">
                 {clients.map((c) => (
-                  <tr key={c.id} className="border-t hover:bg-secondary/40 transition-colors">
-                    <td className="py-3 px-4">
+                  <tr key={c.id} className="hover:bg-muted/40 even:bg-muted/10 transition-colors">
+                    <td className="py-2 px-3">
                       <Link href={`/clients/${c.id}`} className="font-medium text-primary hover:underline">{c.name}</Link>
-                      <div className="text-xs text-muted-foreground">{c.address || 'Sem morada'}</div>
+                      <div className="text-[11px] text-muted-foreground">{c.address || 'Sem morada'}</div>
                     </td>
-                    <td className="py-3 px-4 font-mono">{c.nif}</td>
-                    <td className="py-3 px-4">
-                      <div className="flex flex-col gap-1">
-                        {c.email && <div className="flex items-center gap-1.5 text-xs"><Mail className="w-3 h-3" /> {c.email}</div>}
-                        {c.phone && <div className="flex items-center gap-1.5 text-xs"><Phone className="w-3 h-3" /> {c.phone}</div>}
+                    <td className="py-2 px-3 font-mono">{c.nif}</td>
+                    <td className="py-2 px-3">
+                      <div className="flex flex-col gap-0.5 text-xs">
+                        {c.email && <div className="flex items-center gap-1.5"><Mail className="w-3 h-3 text-muted-foreground" /> {c.email}</div>}
+                        {c.phone && <div className="flex items-center gap-1.5"><Phone className="w-3 h-3 text-muted-foreground" /> {c.phone}</div>}
                       </div>
                     </td>
-                    <td className="py-3 px-4">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${c.is_active ? 'bg-success/10 text-success' : 'bg-muted text-muted-foreground'}`}>
+                    <td className="py-2 px-3">
+                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase font-bold ${c.is_active ? 'bg-success/10 text-success' : 'bg-muted text-muted-foreground'}`}>
                         {c.is_active ? 'Ativo' : 'Inativo'}
                       </span>
                     </td>
-                    <td className="py-3 px-4 text-right">
-                      <Link href={`/clients/${c.id}`} className="p-2 inline-flex hover:bg-secondary rounded-md text-muted-foreground hover:text-foreground mr-1" title="Ver conta corrente">
-                        <Eye className="w-4 h-4" />
-                      </Link>
-                      <button onClick={() => setModal({ open: true, edit: c })} className="p-2 hover:bg-secondary rounded-md text-muted-foreground hover:text-foreground"><Edit className="w-4 h-4" /></button>
+                    <td className="py-2 px-3 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <Link href={`/clients/${c.id}`} className="p-1.5 hover:bg-secondary rounded-md text-muted-foreground hover:text-foreground" title="Ver conta corrente">
+                          <Eye className="w-3.5 h-3.5" />
+                        </Link>
+                        <button onClick={() => setModal({ open: true, edit: c })} className="p-1.5 hover:bg-secondary rounded-md text-muted-foreground hover:text-foreground">
+                          <Edit className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

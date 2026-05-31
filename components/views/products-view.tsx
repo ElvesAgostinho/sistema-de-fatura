@@ -189,46 +189,46 @@ export default function ProductsView() {
             <div className="px-4 py-2 text-xs text-muted-foreground bg-secondary/30 border-b">
               {filtered.length} de {all.length} produtos
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-secondary/60">
-                  <tr className="text-left text-xs uppercase text-muted-foreground">
-                    <th className="py-3 px-4">Nome</th>
-                    <th className="py-3 px-4">SKU</th>
-                    <th className="py-3 px-4 text-right">Preço</th>
-                    <th className="py-3 px-4 text-right">IVA</th>
-                    <th className="py-3 px-4 text-right">Stock</th>
-                    <th className="py-3 px-4 text-right">Ações</th>
+            <div className="flex-1 overflow-x-auto rounded-b-md border bg-card">
+              <table className="w-full text-[13px]">
+                <thead className="bg-muted/50 sticky top-0 backdrop-blur-sm z-10 border-b">
+                  <tr className="text-left font-medium text-muted-foreground">
+                    <th className="py-2.5 px-3">Nome</th>
+                    <th className="py-2.5 px-3">SKU</th>
+                    <th className="py-2.5 px-3 text-right">Preço</th>
+                    <th className="py-2.5 px-3 text-right">IVA</th>
+                    <th className="py-2.5 px-3 text-right">Stock</th>
+                    <th className="py-2.5 px-3 text-right">Ações</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-border">
                   {filtered.map((p) => {
                     const lowStock = p.track_stock && Number(p.quantity_in_stock ?? 0) <= Number(p.stock_alert_threshold ?? 0);
                     return (
-                      <tr key={p.id} className="border-t hover:bg-secondary/40">
-                        <td className="py-3 px-4">
-                          <div className="font-medium">{p.name}</div>
-                          {p.description && <div className="text-xs text-muted-foreground truncate max-w-sm">{p.description}</div>}
+                      <tr key={p.id} className="hover:bg-muted/40 even:bg-muted/10 transition-colors">
+                        <td className="py-2 px-3">
+                          <div className="font-medium text-foreground">{p.name}</div>
+                          {p.description && <div className="text-[11px] text-muted-foreground truncate max-w-[200px]">{p.description}</div>}
                         </td>
-                        <td className="py-3 px-4 font-mono text-xs text-muted-foreground">{p.sku ?? '-'}</td>
-                        <td className="py-3 px-4 text-right font-mono font-semibold">{formatAOA(p.price)}</td>
-                        <td className="py-3 px-4 text-right font-mono text-xs">{Number(p.tax_rate).toFixed(2)}%</td>
-                        <td className="py-3 px-4 text-right">
+                        <td className="py-2 px-3 font-mono text-[11px] text-muted-foreground">{p.sku ?? '-'}</td>
+                        <td className="py-2 px-3 text-right font-mono font-semibold">{formatAOA(p.price)}</td>
+                        <td className="py-2 px-3 text-right font-mono text-[11px]">{Number(p.tax_rate).toFixed(2)}%</td>
+                        <td className="py-2 px-3 text-right">
                           {p.track_stock ? (
-                            <span className={`inline-flex items-center gap-1 text-xs font-mono px-2 py-0.5 rounded ${lowStock ? 'bg-warning/10 text-warning' : 'bg-success/10 text-success'}`}>
+                            <span className={`inline-flex items-center gap-1 text-[11px] font-mono font-bold px-1.5 py-0.5 rounded ${lowStock ? 'bg-warning/10 text-warning' : 'bg-success/10 text-success'}`}>
                               {lowStock && <AlertTriangle className="w-3 h-3" />}
                               {Number(p.quantity_in_stock ?? 0).toFixed(0)}
                             </span>
-                          ) : <span className="text-xs text-muted-foreground">—</span>}
+                          ) : <span className="text-[11px] text-muted-foreground">—</span>}
                         </td>
-                        <td className="py-3 px-4 text-right">
-                          <div className="inline-flex gap-1">
-                            <button onClick={() => setModal({ open: true, edit: p })} className="p-2 rounded hover:bg-secondary text-muted-foreground hover:text-foreground" title="Editar">
-                              <Pencil className="w-4 h-4" />
+                        <td className="py-2 px-3 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <button onClick={() => setModal({ open: true, edit: p })} className="p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-foreground" title="Editar">
+                              <Pencil className="w-3.5 h-3.5" />
                             </button>
                             {isAdmin && (
-                              <button onClick={() => setConfirm(p)} className="p-2 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive" title="Eliminar">
-                                <Trash2 className="w-4 h-4" />
+                              <button onClick={() => setConfirm(p)} className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive" title="Eliminar">
+                                <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             )}
                           </div>

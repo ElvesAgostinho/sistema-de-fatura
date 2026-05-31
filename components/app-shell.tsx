@@ -5,12 +5,13 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
-import { LayoutDashboard, FileText, FilePlus, Users, Package, Settings, LogOut, Menu, X, ShieldCheck, ClipboardList, UserCheck, Receipt, BarChart3, Banknote, CreditCard, Calculator } from 'lucide-react';
+import { LayoutDashboard, FileText, FilePlus, Users, Package, Settings, LogOut, Menu, X, ShieldCheck, ClipboardList, UserCheck, Receipt, BarChart3, Banknote, CreditCard, Calculator, Calendar } from 'lucide-react';
 import { toast } from 'sonner';
 import { invalidateCache, prefetchResource } from '@/lib/hooks/use-resource';
 import CertBadge from './cert-badge';
 import NavProgress from './nav-progress';
 import NotificationBell from './notification-bell';
+import { CommandPalette } from './command-palette';
 
 const MENU_CATEGORIES = [
   {
@@ -19,6 +20,7 @@ const MENU_CATEGORIES = [
       { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
       { href: '/invoices/new', label: 'Emitir Documento', icon: FilePlus },
       { href: '/invoices', label: 'Documentos Emitidos', icon: FileText },
+      { href: '/recurring', label: 'Avenças', icon: Calendar },
       { href: '/pos-close', label: 'Fecho do Dia', icon: Calculator },
       { href: '/clients', label: 'Clientes', icon: Users },
     ]
@@ -141,6 +143,9 @@ export default function AppShell({ children, user, company, isPlatformAdmin, rol
           <div className="text-sm font-semibold truncate">{company?.name ?? '---'}</div>
           <div className="text-xs font-mono text-muted-foreground">NIF: {company?.nif ?? '---'}</div>
           <CertBadge />
+        </div>
+        <div className="pt-3 pb-1">
+          <CommandPalette />
         </div>
         <nav className="flex-1 overflow-y-auto p-3 space-y-4">
           {categories.map((category, idx) => (
