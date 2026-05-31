@@ -116,17 +116,37 @@ export async function POST(req: Request) {
       });
 
       let signature: string | null = null;
+      let signatureKeyId: string | null = null;
       try {
-        const { data: config } = await admin.from('fiscal_config').select('chave_privada').eq('company_id', companyId).maybeSingle();
+        // Fetch both private key AND the fiscal_key archive id so we record
+        // exactly which key was used — critical for verify-signature after key rotation
+        const { data: config } = await admin
+          .from('fiscal_config')
+          .select('chave_privada')
+          .eq('company_id', companyId)
+          .maybeSingle();
+
         if (config?.chave_privada) {
           const payload = buildInvoiceSignaturePayload({ invoice_number: sequence, issued_at: issuedAt, total, previous_hash: prevHash });
           signature = signWithPrivateKey(config.chave_privada, payload);
+
+          // Look up the archived key row whose public key matches the current config
+          // (fiscal_keys stores the public key; we match by company + most recent row)
+          const { data: keyRow } = await admin
+            .from('fiscal_keys')
+            .select('id')
+            .eq('company_id', companyId)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (keyRow?.id) signatureKeyId = keyRow.id;
         }
       } catch (sigErr) { console.error('Signing failed', sigErr); }
 
       const { data: ins, error: insErr } = await admin.from('invoices').insert({
         company_id: companyId, client_id, invoice_number: sequence, document_type: docType,
         subtotal, tax, total, status: 'issued', hash, signature,
+        signature_key_id: signatureKeyId,
         tax_exempt: !!tax_exempt, tax_exemption_reason: tax_exempt ? tax_exemption_reason : null,
         related_document: related_document || null, created_by: ctx.user.id, issued_at: issuedAt,
         client_name: client.name, client_nif: client.nif, client_address: client.address,
