@@ -124,6 +124,13 @@ export default function AppShell({ children, user, company, isPlatformAdmin, rol
     }
     return best;
   })();
+
+  const isActive = (href: string) => {
+    if (optimisticHref) return href === optimisticHref;
+    if (href === '/dashboard' && pathname === '/dashboard') return true;
+    if (href !== '/dashboard' && activeHref === href) return true;
+    return false;
+  };
   return (
     <div className="min-h-screen flex bg-slate-100">
       <NavProgress />
