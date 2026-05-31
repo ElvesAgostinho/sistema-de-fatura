@@ -8,11 +8,15 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: Request) {
   const ctx = await getCurrentUserContext();
   if (!ctx?.profile) return ApiResponse.unauthorized();
+  // Only admins and platform admins can list company users
+  if (ctx.profile.role !== 'admin' && !ctx.profile.is_platform_admin) {
+    return ApiResponse.error('Acesso negado. Apenas administradores podem ver utilizadores.', 403);
+  }
 
   const admin = createAdminClient();
   const { data, error } = await admin
     .from('users')
-    .select('id, email, full_name, role, created_at')
+    .select('id, email, full_name, role, status, created_at')
     .eq('company_id', ctx.profile.company_id)
     .order('created_at', { ascending: false });
 
@@ -67,11 +71,15 @@ export async function POST(req: Request) {
 
     // Auth trigger should automatically insert into public.users if properly configured,
     // but just in case, we can ensure they are in the company:
+    const createdUserId = inviteData?.user?.id;
+    if (!createdUserId) return ApiResponse.error('Falha ao obter ID do utilizador criado.');
+
     const { error: upsertError } = await admin.from('users').upsert({
-      id: inviteData.user.id,
+      id: createdUserId,
       email: email,
       company_id: ctx.profile.company_id,
       role: role || 'caixa',
+      status: 'active',
     }, { onConflict: 'id' });
 
     if (upsertError) return ApiResponse.error(upsertError.message);

@@ -42,7 +42,7 @@ export async function GET() {
       admin.from('invoice_items')
         .select('quantity, price, product:products(id, name), invoice:invoices!inner(status, issued_at, company_id)')
         .eq('invoice.company_id', companyId).eq('invoice.status', 'issued').gte('invoice.issued_at', firstDayYear)
-        .limit(2000),
+        .limit(500),
       admin.from('invoices')
         .select('id, invoice_number, total, amount_paid, payment_status, issued_at, client:clients(name)')
         .eq('company_id', companyId).eq('status', 'issued')

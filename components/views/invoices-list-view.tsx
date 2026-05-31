@@ -12,6 +12,7 @@ import ExportButton from '@/components/export-button';
 type Invoice = {
   id: string; invoice_number: string; document_type: string;
   total: number; status: string; issued_at: string;
+  payment_status?: string; amount_paid?: number;
   client?: { name?: string; nif?: string } | null;
 };
 

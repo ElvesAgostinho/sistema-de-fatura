@@ -3,8 +3,8 @@ import { createAdminClient } from '@/lib/supabase/server';
 import { getCurrentUserContext } from '@/lib/auth';
 import { generateInvoiceHash } from '@/lib/hash';
 import { buildInvoiceSignaturePayload, signWithPrivateKey } from '@/lib/crypto-keys';
-import { redis } from '@/lib/redis';
-import { CacheKeys } from '@/lib/cache-keys';
+import { getCachedOrFetch, redis } from '@/lib/redis';
+import { CacheKeys, CacheTTL } from '@/lib/cache-keys';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,24 +19,41 @@ export async function GET(req: Request) {
   const page = Math.max(parseInt(url.searchParams.get('page') ?? '1'), 1);
   const pageSize = Math.min(parseInt(url.searchParams.get('page_size') ?? '20'), 100);
 
-  const admin = createAdminClient();
-  let query = admin
-    .from('invoices')
-    .select('id, invoice_number, total, status, created_at, document_type, client:clients(name, nif)', { count: 'exact' })
-    .eq('company_id', ctx.profile.company_id);
+  const useCache = !search && !clientId && !type && page === 1;
+  const cacheKey = CacheKeys.invoiceList(ctx.profile.company_id, 'default');
 
-  if (clientId) query = query.eq('client_id', clientId);
-  if (type) query = query.eq('document_type', type);
-  if (search) query = query.ilike('invoice_number', `%${search}%`);
+  const fetchInvoices = async () => {
+    const admin = createAdminClient();
+    let query = admin
+      .from('invoices')
+      .select('id, invoice_number, total, status, created_at, issued_at, payment_status, amount_paid, document_type, client:clients(name, nif)', { count: 'exact' })
+      .eq('company_id', ctx.profile.company_id);
 
-  const from = (page - 1) * pageSize;
-  const to = from + pageSize - 1;
-  query = query.order('created_at', { ascending: false }).range(from, to);
+    if (clientId) query = query.eq('client_id', clientId);
+    if (type) query = query.eq('document_type', type);
+    
+    // limit search to 100 chars to avoid expensive ILIKE DOS
+    const safeSearch = search.slice(0, 100);
+    if (safeSearch) query = query.ilike('invoice_number', `%${safeSearch}%`);
 
-  const { data, error, count } = await query;
-  if (error) return ApiResponse.error(error.message, 500);
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+    query = query.order('created_at', { ascending: false }).range(from, to);
 
-  return ApiResponse.success({ invoices: data ?? [], total: count ?? 0, page, pageSize });
+    const { data, error, count } = await query;
+    if (error) throw new Error(error.message);
+
+    return { invoices: data ?? [], total: count ?? 0, page, pageSize };
+  };
+
+  try {
+    const result = useCache 
+      ? await getCachedOrFetch(cacheKey, fetchInvoices, CacheTTL.invoiceList)
+      : await fetchInvoices();
+    return ApiResponse.success(result);
+  } catch (err: any) {
+    return ApiResponse.error(err.message, 500);
+  }
 }
 
 export async function POST(req: Request) {
@@ -213,9 +230,10 @@ export async function POST(req: Request) {
       details: { invoice_number: invoice.invoice_number, total, client_nif: client.nif, hash: invoice.hash },
     }).then(({ error }) => { if (error) console.error('Audit log failed', error); });
 
-    // Invalidate dashboard cache so metrics reflect the new invoice immediately
+    // Invalidate dashboard and invoice list caches
     if (redis) {
       redis.del(CacheKeys.dashboardStats(companyId)).catch(() => {});
+      redis.del(CacheKeys.invoiceList(companyId, 'default')).catch(() => {});
     }
 
     return ApiResponse.success({ invoice });

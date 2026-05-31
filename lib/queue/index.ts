@@ -1,4 +1,4 @@
-import { Queue, Worker, QueueEvents } from 'bullmq';
+import { Queue, QueueEvents } from 'bullmq';
 import Redis from 'ioredis';
 
 // Conexão IORedis genérica para as Filas (suporta Docker local ou Upstash Redis caso Upstash seja exposto via Redis TCP)
