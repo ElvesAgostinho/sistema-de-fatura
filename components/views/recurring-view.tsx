@@ -61,7 +61,7 @@ export default function RecurringView() {
               }
             }} 
             disabled={loading} 
-            className="ms-btn-secondary bg-[#005A9E] text-white hover:bg-[#004A82] border-transparent hover:border-[#003A62] inline-flex items-center gap-2"
+            className="ms-btn-secondary inline-flex items-center gap-2"
           >
             <RefreshCw className="w-4 h-4" /> Processar Lote Pendente
           </button>

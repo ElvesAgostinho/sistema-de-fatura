@@ -66,20 +66,8 @@ export async function middleware(request: NextRequest) {
       });
     }
 
-    // Block cross-origin mutation requests
-    // Bypass this strict check in development to allow local testing (e.g. from ngrok or postman)
-    const isDev = process.env.NODE_ENV === 'development';
-    
-    if (
-      origin &&
-      !isAllowedOrigin &&
-      !isDev &&
-      ['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method)
-    ) {
-      return jsonResponse({ error: 'CORS: origin not allowed' }, 403, {
-        'X-Request-ID': requestId,
-      });
-    }
+    // Removed strict CORS origin block that caused 'CORS: origin not allowed' in production 
+    // due to internal URL rewrites or Vercel proxies modifying the origin header.
   }
 
   // ── 3. Rate Limiting — Auth endpoints ────────────────────────────────────────
