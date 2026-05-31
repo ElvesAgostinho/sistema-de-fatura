@@ -1,6 +1,6 @@
 'use client';
 
-import { FileText, LayoutDashboard, FilePlus, Users, Package, Banknote, BarChart3, Settings, LogOut, UserCheck, Menu, X, Calendar, Calculator, ChevronDown } from 'lucide-react';
+import { FileText, LayoutDashboard, FilePlus, Users, Package, Banknote, BarChart3, Settings, LogOut, UserCheck, Menu, X, Calendar, Calculator, ChevronDown, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
