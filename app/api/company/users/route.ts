@@ -26,19 +26,37 @@ export async function POST(req: Request) {
   if (!ctx?.profile || ctx.profile.role !== 'admin') return ApiResponse.unauthorized();
 
   try {
-    const { email, role } = await req.json();
+    const { email, password, role } = await req.json();
     if (!email) return ApiResponse.error('Email obrigatório');
 
     const admin = createAdminClient();
     
-    // Check if user exists in auth.users
-    // Supabase admin API allows inviting users
-    const { data: inviteData, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, {
-      data: {
-        company_id: ctx.profile.company_id,
-        role: role || 'caixa',
-      }
-    });
+    let inviteData, inviteError;
+    
+    if (password) {
+      // Create user directly with the provided password
+      const res = await admin.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+        user_metadata: {
+          company_id: ctx.profile.company_id,
+          role: role || 'caixa',
+        }
+      });
+      inviteData = res.data;
+      inviteError = res.error;
+    } else {
+      // Send invite email (fallback)
+      const res = await admin.auth.admin.inviteUserByEmail(email, {
+        data: {
+          company_id: ctx.profile.company_id,
+          role: role || 'caixa',
+        }
+      });
+      inviteData = res.data;
+      inviteError = res.error;
+    }
 
     if (inviteError) {
       if (inviteError.message.includes('already exists')) {
@@ -58,7 +76,7 @@ export async function POST(req: Request) {
 
     if (upsertError) return ApiResponse.error(upsertError.message);
 
-    return ApiResponse.success({ message: 'Convite enviado' });
+    return ApiResponse.success({ message: password ? 'Utilizador criado com sucesso' : 'Convite enviado' });
   } catch (err: any) {
     return ApiResponse.error(err.message, 500);
   }

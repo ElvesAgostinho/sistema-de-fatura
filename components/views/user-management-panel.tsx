@@ -21,6 +21,7 @@ export default function UserManagementPanel() {
   const users = data?.users ?? [];
 
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [role, setRole] = useState('caixa');
   const [inviting, setInviting] = useState(false);
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
@@ -33,12 +34,13 @@ export default function UserManagementPanel() {
       const r = await fetch('/api/company/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim(), role })
+        body: JSON.stringify({ email: email.trim(), password: password || undefined, role })
       });
       const j = await r.json();
-      if (!r.ok) { toast.error(j?.error ?? 'Falha ao convidar'); return; }
-      toast.success('Convite enviado com sucesso');
+      if (!r.ok) { toast.error(j?.error ?? 'Falha ao adicionar utilizador'); return; }
+      toast.success(password ? 'Utilizador criado com sucesso' : 'Convite enviado com sucesso');
       setEmail('');
+      setPassword('');
       reload();
     } catch (err: any) {
       toast.error('Erro de conexão');
@@ -97,7 +99,7 @@ export default function UserManagementPanel() {
     <div className="space-y-6">
       {/* Invite Form */}
       <div className="ms-card p-6">
-        <h3 className="font-semibold flex items-center gap-2 mb-4"><UserPlus className="w-4 h-4 text-primary" /> Convidar Utilizador</h3>
+        <h3 className="font-semibold flex items-center gap-2 mb-4"><UserPlus className="w-4 h-4 text-primary" /> Adicionar Utilizador</h3>
         <form onSubmit={onInvite} className="flex flex-col sm:flex-row items-end gap-4">
           <div className="flex-1 w-full">
             <label className="text-xs text-muted-foreground mb-1 block">Email</label>
@@ -107,6 +109,16 @@ export default function UserManagementPanel() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="exemplo@email.com" 
+              className="w-full h-10 px-3 rounded border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary" 
+            />
+          </div>
+          <div className="flex-1 w-full">
+            <label className="text-xs text-muted-foreground mb-1 block">Senha (Opcional - acesso imediato)</label>
+            <input 
+              type="password" 
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Definir senha para o caixa..." 
               className="w-full h-10 px-3 rounded border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary" 
             />
           </div>
@@ -122,9 +134,12 @@ export default function UserManagementPanel() {
             </select>
           </div>
           <button type="submit" disabled={inviting} className="w-full sm:w-auto h-10 px-4 rounded bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 disabled:opacity-60 inline-flex justify-center items-center gap-2">
-            {inviting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Convidar'}
+            {inviting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Adicionar'}
           </button>
         </form>
+        <p className="text-xs text-muted-foreground mt-3">
+          Se definir uma senha, o operador de caixa poderá iniciar sessão imediatamente com o email e a senha indicados. Se não definir senha, será enviado um link de convite por email.
+        </p>
       </div>
 
       {/* Users List */}
