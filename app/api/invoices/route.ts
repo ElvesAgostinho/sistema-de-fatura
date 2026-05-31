@@ -1,0 +1,198 @@
+import { ApiResponse } from '@/lib/api-response';
+import { createAdminClient } from '@/lib/supabase/server';
+import { getCurrentUserContext } from '@/lib/auth';
+import { generateInvoiceHash } from '@/lib/hash';
+import { buildInvoiceSignaturePayload, signWithPrivateKey } from '@/lib/crypto-keys';
+
+export const dynamic = 'force-dynamic';
+
+export async function GET(req: Request) {
+  const ctx = await getCurrentUserContext();
+  if (!ctx?.profile) return ApiResponse.unauthorized();
+
+  const url = new URL(req.url);
+  const search = url.searchParams.get('search') ?? '';
+  const clientId = url.searchParams.get('client_id');
+  const type = url.searchParams.get('type');
+  const page = Math.max(parseInt(url.searchParams.get('page') ?? '1'), 1);
+  const pageSize = Math.min(parseInt(url.searchParams.get('page_size') ?? '20'), 100);
+
+  const admin = createAdminClient();
+  let query = admin
+    .from('invoices')
+    .select('id, invoice_number, total, status, created_at, document_type, client:clients(name, nif)', { count: 'exact' })
+    .eq('company_id', ctx.profile.company_id);
+
+  if (clientId) query = query.eq('client_id', clientId);
+  if (type) query = query.eq('document_type', type);
+  if (search) query = query.ilike('invoice_number', `%${search}%`);
+
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+  query = query.order('created_at', { ascending: false }).range(from, to);
+
+  const { data, error, count } = await query;
+  if (error) return ApiResponse.error(error.message, 500);
+
+  return ApiResponse.success({ invoices: data ?? [], total: count ?? 0, page, pageSize });
+}
+
+export async function POST(req: Request) {
+  const ctx = await getCurrentUserContext();
+  if (!ctx?.profile) return ApiResponse.unauthorized();
+  const companyId = ctx.profile.company_id;
+
+  try {
+    const body = await req.json();
+    const { client_id, items, tax_exempt, tax_exemption_reason, document_type, related_document, payment_method, valid_until, transport_details } = body ?? {};
+
+    if (!client_id) return ApiResponse.error('Cliente obrigatório');
+    if (!Array.isArray(items) || items.length === 0) return ApiResponse.error('Adicione pelo menos um item');
+    const docType = document_type || 'FT';
+    if (!['FT', 'FR', 'NC', 'ND', 'RC', 'PP', 'GT'].includes(docType)) return ApiResponse.error('Tipo de documento inválido');
+
+    const admin = createAdminClient();
+
+    // Verify client
+    const { data: client } = await admin.from('clients').select('*').eq('id', client_id).eq('company_id', companyId).maybeSingle();
+    if (!client) return ApiResponse.error('Cliente não encontrado', 404);
+
+    // Compute totals
+    let subtotal = 0, tax = 0, total = 0;
+    const cleanItems: any[] = [];
+    for (const it of items) {
+      const qty = Number(it?.quantity);
+      const price = Number(it?.price);
+      const rate = tax_exempt ? 0 : Number(it?.tax_rate ?? 14);
+      const desc = String(it?.description ?? '').trim();
+      
+      if (!desc) return ApiResponse.error('Descrição do item em falta');
+      if (!Number.isFinite(qty) || qty <= 0) return ApiResponse.error('Quantidade inválida');
+      if (!Number.isFinite(price) || price < 0) return ApiResponse.error('Preço inválido');
+
+      const lineSubtotal = +(qty * price).toFixed(2);
+      const lineTax = +(lineSubtotal * (rate / 100)).toFixed(2);
+      const lineTotal = +(lineSubtotal + lineTax).toFixed(2);
+      subtotal += lineSubtotal; tax += lineTax; total += lineTotal;
+      
+      cleanItems.push({ 
+        description: desc, 
+        quantity: qty, 
+        price, 
+        tax_rate: rate, 
+        total: lineTotal,
+        product_id: it?.product_id ?? null
+      });
+    }
+    subtotal = +subtotal.toFixed(2); tax = +tax.toFixed(2); total = +total.toFixed(2);
+
+    // 1. Batch fetch all relevant products to avoid N queries
+    const productIds = cleanItems.map(it => it.product_id).filter(Boolean);
+    const { data: products } = productIds.length > 0 
+      ? await admin.from('products').select('id, quantity_in_stock, track_stock').in('id', productIds)
+      : { data: [] };
+    const productMap = new Map((products || []).map(p => [p.id, p]));
+
+    // Sequential numbering with lock/retry logic
+    const year = new Date().getFullYear();
+    const maxAttempts = 3;
+    let attempt = 0;
+    let invoice: any = null;
+
+    while (attempt < maxAttempts) {
+      attempt++;
+      const { data: sequence, error: sErr } = await admin.rpc('get_next_invoice_number', { 
+        p_company_id: companyId, p_doc_type: docType, p_year: year 
+      });
+      if (sErr) return ApiResponse.error('Erro ao gerar numeração: ' + sErr.message);
+
+      const { data: lastInvoice } = await admin.from('invoices')
+        .select('hash').eq('company_id', companyId).order('created_at', { ascending: false }).limit(1).maybeSingle();
+      
+      const prevHash = lastInvoice?.hash || '';
+      const issuedAt = new Date().toISOString();
+      const hash = generateInvoiceHash({ 
+        invoice_number: sequence, client_nif: client.nif, total, issued_at: issuedAt, previous_hash: prevHash 
+      });
+
+      let signature: string | null = null;
+      try {
+        const { data: config } = await admin.from('fiscal_config').select('chave_privada').eq('company_id', companyId).maybeSingle();
+        if (config?.chave_privada) {
+          const payload = buildInvoiceSignaturePayload({ invoice_number: sequence, issued_at: issuedAt, total, previous_hash: prevHash });
+          signature = signWithPrivateKey(config.chave_privada, payload);
+        }
+      } catch (sigErr) { console.error('Signing failed', sigErr); }
+
+      const { data: ins, error: insErr } = await admin.from('invoices').insert({
+        company_id: companyId, client_id, invoice_number: sequence, document_type: docType,
+        subtotal, tax, total, status: 'issued', hash, signature,
+        tax_exempt: !!tax_exempt, tax_exemption_reason: tax_exempt ? tax_exemption_reason : null,
+        related_document: related_document || null, created_by: ctx.user.id, issued_at: issuedAt,
+        client_name: client.name, client_nif: client.nif, client_address: client.address,
+        valid_until: docType === 'PP' ? valid_until : null,
+        transport_details: docType === 'GT' ? transport_details : null,
+        amount_paid: (docType === 'FR' || docType === 'RC') ? total : 0,
+        payment_status: (docType === 'FR' || docType === 'RC') ? 'pago' : 'pendente'
+      }).select().single();
+
+      if (insErr) {
+        if (insErr.code === '23505') continue;
+        return ApiResponse.error(insErr.message);
+      }
+      invoice = ins;
+      break;
+    }
+
+    if (!invoice) return ApiResponse.error('Falha ao gerar documento (concorrência)');
+
+    // 2. Optimized Data Persistence (Batching)
+    const itemsToInsert = cleanItems.map((c) => ({ ...c, invoice_id: invoice.id }));
+    const stockMovements: any[] = [];
+    const stockUpdatePromises: any[] = [];
+
+    if (['FT', 'FR'].includes(docType)) {
+      for (const item of cleanItems) {
+        const p = item.product_id ? productMap.get(item.product_id) : null;
+        if (p && p.track_stock) {
+          const newBalance = Number(p.quantity_in_stock ?? 0) - Number(item.quantity);
+          stockUpdatePromises.push(admin.from('products').update({ quantity_in_stock: newBalance }).eq('id', p.id));
+          stockMovements.push({
+            company_id: companyId, product_id: p.id, invoice_id: invoice.id,
+            movement_type: 'venda', quantity: -item.quantity, balance_after: newBalance,
+            notes: `Venda via ${invoice.invoice_number}`,
+          });
+        }
+      }
+    }
+
+    // Execute items insert, stock updates, and movements in parallel
+    const p1 = admin.from('invoice_items').insert(itemsToInsert);
+    const p2 = stockMovements.length > 0 ? admin.from('stock_movements').insert(stockMovements) : Promise.resolve();
+    const p3 = (docType === 'FR' || docType === 'RC') ? admin.from('payments').insert({
+      company_id: companyId,
+      invoice_id: invoice.id,
+      amount: total,
+      payment_date: invoice.issued_at,
+      method: payment_method || 'Dinheiro',
+      created_by: ctx.user.id,
+      notes: `Recebimento automático (${docType})`
+    }) : Promise.resolve();
+    
+    await Promise.all([
+      p1, p2, p3,
+      ...stockUpdatePromises,
+    ]);
+
+    // 3. Fire-and-forget Audit Log (Non-blocking)
+    admin.from('audit_logs').insert({
+      user_id: ctx.user.id, company_id: companyId,
+      action: 'invoice.create', entity: 'invoice', entity_id: invoice.id,
+      details: { invoice_number: invoice.invoice_number, total, client_nif: client.nif, hash: invoice.hash },
+    }).then(({ error }) => { if (error) console.error('Audit log failed', error); });
+
+    return ApiResponse.success({ invoice });
+  } catch (err: any) {
+    return ApiResponse.error(err?.message ?? 'Erro interno no servidor', 500);
+  }
+}
