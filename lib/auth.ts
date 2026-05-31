@@ -16,6 +16,33 @@ type CtxCacheValue = {
 };
 const CTX_CACHE = new Map<string, CtxCacheValue>();
 const CTX_TTL_MS = 60_000; // 60s — profile/company rarely change
+const CTX_MAX_SIZE = 500;
+
+/**
+ * Periodic cleanup — removes expired entries every 5 minutes.
+ * Prevents memory leaks in long-running server processes (e.g. Docker/PM2).
+ */
+function scheduleCtxCacheCleanup() {
+  const CLEANUP_INTERVAL = 5 * 60 * 1000; // 5 minutes
+  const timer = setInterval(() => {
+    const now = Date.now();
+    let evicted = 0;
+    for (const [key, val] of CTX_CACHE.entries()) {
+      if (val.expiresAt <= now) {
+        CTX_CACHE.delete(key);
+        evicted++;
+      }
+    }
+    if (evicted > 0 && process.env.NODE_ENV === 'development') {
+      console.debug(`[Auth Cache] Evicted ${evicted} expired entries. Size: ${CTX_CACHE.size}`);
+    }
+  }, CLEANUP_INTERVAL);
+  // Allow Node.js to exit even if timer is active
+  if (timer.unref) timer.unref();
+}
+
+// Start cleanup on module load (runs once per server instance)
+try { scheduleCtxCacheCleanup(); } catch { /* Edge runtime may not support setInterval */ }
 
 function pickAccessToken(): string | null {
   try {
@@ -78,10 +105,18 @@ export const getCurrentUserContext = cache(async () => {
       company: ctx.company,
       expiresAt: Date.now() + CTX_TTL_MS,
     });
-    // Light LRU: drop oldest if cache grows too big
-    if (CTX_CACHE.size > 500) {
-      const firstKey = CTX_CACHE.keys().next().value;
-      if (firstKey) CTX_CACHE.delete(firstKey);
+    // LRU eviction: if cache is full, remove oldest expired entry first,
+    // then fall back to oldest entry regardless of TTL.
+    if (CTX_CACHE.size > CTX_MAX_SIZE) {
+      const now = Date.now();
+      let evicted = false;
+      for (const [k, v] of CTX_CACHE.entries()) {
+        if (v.expiresAt <= now) { CTX_CACHE.delete(k); evicted = true; break; }
+      }
+      if (!evicted) {
+        const firstKey = CTX_CACHE.keys().next().value;
+        if (firstKey) CTX_CACHE.delete(firstKey);
+      }
     }
   }
 

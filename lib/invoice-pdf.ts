@@ -20,8 +20,6 @@ export async function buildInvoiceHtml(inv: any, items: any[], company: any, fcf
       <td class="num">${formatAOA(it.total)}</td>
     </tr>`).join('');
 
-  // Build QR payload - compact key fields for validation
-  // Format: NIF_emitente|NIF_cliente|numero|data|total|iva|hash8
   const qrPayload = [
     company?.nif ?? '',
     inv.client_nif ?? '',
@@ -157,34 +155,69 @@ ${inv.tax_exemption_reason ? `<div class="exempt"><strong>Isenção de IVA:</str
 </body></html>`;
 }
 
+/**
+ * Gera PDF via AbacusAI com:
+ * - Backoff exponencial: 500ms → 1s → 2s (max)
+ * - Timeout máximo de 30 segundos (era 120s)
+ * - Mensagens de erro claras
+ */
 export async function generateInvoicePdfBuffer(html: string): Promise<Buffer> {
+  const apiKey = process.env.ABACUSAI_API_KEY;
+  if (!apiKey) throw new Error('ABACUSAI_API_KEY não configurada');
+
+  // 1. Criar pedido de conversão
   const createResp = await fetch('https://apps.abacus.ai/api/createConvertHtmlToPdfRequest', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      deployment_token: process.env.ABACUSAI_API_KEY,
+      deployment_token: apiKey,
       html_content: html,
-      pdf_options: { format: 'A4', print_background: true, margin: { top: '15mm', right: '15mm', bottom: '15mm', left: '15mm' } },
+      pdf_options: {
+        format: 'A4',
+        print_background: true,
+        margin: { top: '15mm', right: '15mm', bottom: '15mm', left: '15mm' },
+      },
     }),
   });
-  if (!createResp.ok) throw new Error('Falha geração PDF');
-  const { request_id } = await createResp.json();
-  if (!request_id) throw new Error('Sem request_id');
 
-  const maxAttempts = 120;
-  for (let i = 0; i < maxAttempts; i++) {
-    await new Promise((r) => setTimeout(r, 1000));
+  if (!createResp.ok) {
+    throw new Error(`Falha ao criar pedido de PDF: ${createResp.status} ${createResp.statusText}`);
+  }
+
+  const { request_id } = await createResp.json();
+  if (!request_id) throw new Error('Sem request_id na resposta');
+
+  // 2. Polling com backoff exponencial — máximo 30 segundos
+  const TIMEOUT_MS = 30_000;
+  const deadline = Date.now() + TIMEOUT_MS;
+  let delay = 500;          // começa em 500ms
+  const MAX_DELAY = 2000;   // nunca mais de 2s entre tentativas
+
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, delay));
+    delay = Math.min(delay * 2, MAX_DELAY); // 500 → 1000 → 2000 → 2000…
+
     const st = await fetch('https://apps.abacus.ai/api/getConvertHtmlToPdfStatus', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ request_id, deployment_token: process.env.ABACUSAI_API_KEY }),
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ request_id, deployment_token: apiKey }),
     });
+
+    if (!st.ok) continue; // erro de rede temporário — tentar de novo
+
     const j = await st.json();
+
     if (j?.status === 'SUCCESS') {
       const b64 = j?.result?.result;
-      if (!b64) throw new Error('PDF vazio');
+      if (!b64) throw new Error('PDF vazio na resposta');
       return Buffer.from(b64, 'base64');
     }
-    if (j?.status === 'FAILED') throw new Error(j?.result?.error ?? 'Falha PDF');
+
+    if (j?.status === 'FAILED') {
+      throw new Error(j?.result?.error ?? 'Geração de PDF falhou no serviço externo');
+    }
+    // PENDING ou PROCESSING — continuar polling
   }
-  throw new Error('Timeout PDF');
+
+  throw new Error(`Timeout ao gerar PDF (>${TIMEOUT_MS / 1000}s). Tente novamente.`);
 }
