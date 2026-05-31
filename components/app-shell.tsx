@@ -124,9 +124,7 @@ export default function AppShell({ children, user, company, isPlatformAdmin, rol
     }
     return best;
   })();
-  const effectiveHref = optimisticHref ?? activeHref;
-  const isActive = (href: string) => effectiveHref === href;
-
+  return (
     <div className="min-h-screen flex bg-slate-100">
       <NavProgress />
       {/* Sidebar desktop */}
