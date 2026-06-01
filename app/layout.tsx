@@ -6,6 +6,7 @@ import { ChunkLoadErrorHandler } from '@/components/chunk-load-error-handler';
 import SwRegister from '@/components/sw-register';
 import InstallPrompt from '@/components/install-prompt';
 import { ResourcePrefetcher } from '@/components/resource-prefetcher';
+import Script from 'next/script';
 
 export const dynamic = 'force-dynamic';
 
@@ -54,14 +55,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="pt-AO" suppressHydrationWarning className={inter.variable}>
       <head>
-        <script src="https://apps.abacus.ai/chatllm/appllm-lib.js"></script>
         <meta name="application-name" content="FaturaAO" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta name="apple-mobile-web-app-title" content="FaturaAO" />
         <meta name="mobile-web-app-capable" content="yes" />
       </head>
-      <body className="font-sans antialiased bg-background text-foreground">
+      <body className="font-sans antialiased bg-background text-foreground" suppressHydrationWarning>
+        <Script src="https://apps.abacus.ai/chatllm/appllm-lib.js" strategy="lazyOnload" />
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false} disableTransitionOnChange>
           {children}
           <Toaster richColors position="top-right" />
