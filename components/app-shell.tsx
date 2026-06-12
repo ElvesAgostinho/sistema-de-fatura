@@ -56,6 +56,16 @@ const getXeroMenus = (role?: string, isPlatformAdmin?: boolean) => {
     });
   }
 
+  // Menu de Administração da Plataforma — só visível ao super admin
+  if (isPlatformAdmin) {
+    baseMenus.push({
+      title: 'Administração',
+      items: [
+        { href: '/admin/approvals', label: '✅ Aprovação de Contas' },
+      ]
+    });
+  }
+
   // Se for apenas caixa, limitar opções no Negócios
   if (role === 'caixa') {
     const negociosIndex = baseMenus.findIndex(m => m.title === 'Negócios');
