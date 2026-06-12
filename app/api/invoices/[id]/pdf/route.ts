@@ -11,9 +11,17 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
 
   const admin = createAdminClient();
   const { data: invoice } = await admin.from('invoices')
-    .select('*, items:invoice_items(*)')
+    .select('*, items:invoice_items(*), client:clients(id, name, email, phone, address, nif)')
     .eq('id', params.id).eq('company_id', ctx.profile.company_id).maybeSingle();
   if (!invoice) return NextResponse.json({ error: 'Fatura não encontrada' }, { status: 404 });
+
+  // Enrich invoice with client details for PDF
+  const enriched = {
+    ...invoice,
+    client_email:   invoice.client_email   || invoice.client?.email   || null,
+    client_phone:   invoice.client_phone   || invoice.client?.phone   || null,
+    client_address: invoice.client_address || invoice.client?.address || null,
+  };
 
   const company = ctx.company;
   const items = invoice.items ?? [];
@@ -22,12 +30,12 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
     .select('mode, agt_certificado_numero').eq('company_id', ctx.profile.company_id).maybeSingle();
 
   try {
-    const html = await buildInvoiceHtml(invoice, items, company, fcfg);
+    const html = await buildInvoiceHtml(enriched, items, company, fcfg);
     const buf = await generateInvoicePdfBuffer(html);
     return new NextResponse(buf, {
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="${invoice.invoice_number.replace(/[^a-zA-Z0-9\-]/g, '_')}.pdf"`,
+        'Content-Disposition': `attachment; filename="${enriched.invoice_number.replace(/[^a-zA-Z0-9\-]/g, '_')}.pdf"`,
       },
     });
   } catch (err: any) {
