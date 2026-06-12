@@ -13,7 +13,7 @@ import { toast } from 'sonner';
 import type { POSProduct, POSCartItem, PaymentMethod, POSSession } from '@/lib/pos/types';
 import {
   printReceiptFallback, printToThermal, connectThermalPrinter,
-  isThermalConnected, type ReceiptData,
+  isThermalConnected, openCashDrawer, type ReceiptData,
 } from '@/lib/pos/thermal-printer';
 
 /* ─── Design Tokens (Xero Palette) ────────────────────────────────────────── */
@@ -749,6 +749,11 @@ export default function POSView() {
       };
       if (isThermalConnected()) printToThermal(data).then(res => { if (!res.ok) printReceiptFallback(data); });
       else printReceiptFallback(data);
+
+      // ✨ Auto-open cash drawer when paying in cash with change
+      if (paymentMethod === 'Dinheiro' && isThermalConnected()) {
+        openCashDrawer().catch(() => {});
+      }
     } catch (e: any) { toast.error(e?.message ?? 'Erro inesperado'); }
     finally { setProcessing(false); }
   };

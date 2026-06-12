@@ -37,6 +37,8 @@ const BOLD_OFF      = [ESC, 0x45, 0x00];
 const DOUBLE_HEIGHT = [ESC, 0x21, 0x10];
 const NORMAL_SIZE   = [ESC, 0x21, 0x00];
 const CUT_PAPER     = [GS, 0x56, 0x42, 0x00];
+// Cash drawer pulse — ESC p pin2 t1 t2 (Epson/Star/Bixolon DK connector)
+const OPEN_DRAWER   = [ESC, 0x70, 0x00, 0x64, 0x64];
 
 function textToBytes(text: string): number[] {
   const bytes: number[] = [];
@@ -287,6 +289,27 @@ export function disconnectThermalPrinter() {
 }
 
 export function isThermalConnected(): boolean { return _port !== null; }
+
+/**
+ * openCashDrawer — sends ESC p pulse to open the cash drawer.
+ * Requires a thermal printer connected via Web Serial API with
+ * a cash drawer connected to the DK (Drawer Kick) port.
+ * Standard on Epson TM-T20, TM-T88, Bixolon SRP-350, Star TSP100.
+ */
+export async function openCashDrawer(): Promise<{ ok: boolean; error?: string }> {
+  if (!_port) {
+    const conn = await connectThermalPrinter();
+    if (!conn.ok) return { ok: false, error: 'Impressora não conectada. ' + (conn.error ?? '') };
+  }
+  try {
+    const writer = _port!.writable!.getWriter();
+    await writer.write(new Uint8Array(OPEN_DRAWER));
+    writer.releaseLock();
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? 'Falha ao abrir gaveta' };
+  }
+}
 
 // ── Browser print fallback ─────────────────────────────────────────────────────
 export function printReceiptFallback(data: ReceiptData) {
