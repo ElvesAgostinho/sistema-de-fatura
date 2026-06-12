@@ -40,6 +40,7 @@ export default function PosCloseView() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [zNumber, setZNumber] = useState<number | null>(null);
+  const [declaredCash, setDeclaredCash] = useState<string>('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -72,7 +73,7 @@ export default function PosCloseView() {
         closed_at:        sess?.closed_at ?? new Date().toISOString(),
         opened_by_email:  sess?.opened_by_email ?? '',
         opening_balance:  rec.opening_balance,
-        closing_balance:  rec.closing_balance,
+        closing_balance:  Number(declaredCash) || 0,
         total_cash:       st.total_cash,
         total_multicaixa: st.total_multicaixa,
         total_tpa:        st.total_tpa,
@@ -80,7 +81,7 @@ export default function PosCloseView() {
         total_sales:      st.total_sales,
         sales_count:      st.sales_count,
         tax_total:        data.invoices.tax_total,
-        difference:       rec.difference,
+        difference:       Number(declaredCash) - rec.expected_in_cash, // Server will recalculate securely
         notes:            sess?.notes,
       };
       const r = await fetch('/api/pos/z-report', {
@@ -181,9 +182,13 @@ export default function PosCloseView() {
             <RefreshCw className="w-5 h-5" />
           </button>
           {!saved && (
-            <button onClick={saveZReport} disabled={saving} className="ms-btn-secondary flex items-center gap-2 min-h-[44px]">
+            <button 
+              onClick={saveZReport} 
+              disabled={saving || declaredCash === ''} 
+              className="ms-btn-secondary flex items-center gap-2 min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed"
+            >
               <FileCheck className="w-4 h-4" />
-              {saving ? 'A guardar…' : 'Guardar Z-Report'}
+              {saving ? 'A guardar…' : 'Confirmar Fecho Cego'}
             </button>
           )}
           {saved && (
@@ -283,37 +288,59 @@ export default function PosCloseView() {
             </div>
           </div>
 
-          {/* Reconciliation */}
+          {/* Reconciliation - BLIND CLOSE */}
           <div className="border-t-2 border-black pt-3">
             <div className="font-bold text-xs uppercase tracking-wider mb-2">Reconciliação de Caixa</div>
-            <div className="space-y-1 text-xs">
-              <div className="flex justify-between">
-                <span>Fundo de Abertura:</span>
-                <span>{formatAOA(data?.reconciliation?.opening_balance ?? 0)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>+ Dinheiro Recebido:</span>
-                <span>{formatAOA(data?.session_totals?.total_cash ?? 0)}</span>
-              </div>
-              <div className="flex justify-between font-bold">
-                <span>= Esperado em Caixa:</span>
-                <span>{formatAOA(data?.reconciliation?.expected_in_cash ?? 0)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Dinheiro Declarado:</span>
-                <span>{formatAOA(data?.reconciliation?.closing_balance ?? 0)}</span>
-              </div>
-              <div className={`flex justify-between font-black text-sm pt-1 border-t border-gray-200 ${diffColor}`}>
-                <span>{diffIcon} Diferença:</span>
-                <span>{diff >= 0 ? '+' : ''}{formatAOA(diff)}</span>
-              </div>
-              {Math.abs(diff) > 50 && (
-                <div className="flex items-center gap-1 text-red-500 text-[10px] mt-1">
-                  <AlertTriangle className="w-3 h-3" />
-                  <span>Diferença significativa — verificar contagem!</span>
+            
+            {!saved ? (
+              <div className="space-y-4 text-xs no-print mb-4 p-4 border-2 border-dashed border-gray-300 rounded bg-gray-50">
+                <div className="flex items-start gap-2 text-primary font-bold mb-2">
+                  <AlertTriangle className="w-4 h-4 mt-0.5" />
+                  <div>
+                    FECHO CEGO (BLIND CLOSE)
+                    <div className="font-normal text-gray-500 mt-1">
+                      Conte fisicamente o dinheiro na gaveta e digite o valor abaixo antes de fechar a sessão.
+                    </div>
+                  </div>
                 </div>
-              )}
-            </div>
+                <div>
+                  <label className="block text-gray-700 font-bold mb-1">Total em Numerário na Gaveta (Kz)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="0.00"
+                    className="w-full border border-gray-300 rounded px-3 py-2 text-lg font-mono focus:ring-2 focus:ring-primary outline-none transition-shadow"
+                    value={declaredCash}
+                    onChange={(e) => setDeclaredCash(e.target.value)}
+                  />
+                </div>
+                <div className="text-[10px] text-gray-400 mt-2 text-center">Os totais esperados serão revelados após confirmação do fecho.</div>
+              </div>
+            ) : (
+              <div className="space-y-1 text-xs">
+                <div className="flex justify-between">
+                  <span>Fundo de Abertura:</span>
+                  <span>{formatAOA(data?.reconciliation?.opening_balance ?? 0)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>+ Dinheiro Recebido:</span>
+                  <span>{formatAOA(data?.session_totals?.total_cash ?? 0)}</span>
+                </div>
+                <div className="flex justify-between font-bold">
+                  <span>= Esperado em Caixa:</span>
+                  <span>{formatAOA(data?.reconciliation?.expected_in_cash ?? 0)}</span>
+                </div>
+                <div className="flex justify-between text-primary font-bold">
+                  <span>Dinheiro Declarado:</span>
+                  <span>{formatAOA(Number(declaredCash))}</span>
+                </div>
+                <div className={`flex justify-between font-black text-sm pt-1 border-t border-gray-200 ${Number(declaredCash) - (data?.reconciliation?.expected_in_cash ?? 0) === 0 ? 'text-emerald-600' : Number(declaredCash) - (data?.reconciliation?.expected_in_cash ?? 0) > 0 ? 'text-sky-600' : 'text-red-600'}`}>
+                  <span>Diferença:</span>
+                  <span>{formatAOA(Number(declaredCash) - (data?.reconciliation?.expected_in_cash ?? 0))}</span>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* AGT Footer */}

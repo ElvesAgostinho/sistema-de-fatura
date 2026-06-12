@@ -105,6 +105,26 @@ export async function POST(req: Request) {
     }
     subtotal = +subtotal.toFixed(2); tax = +tax.toFixed(2); total = +total.toFixed(2);
 
+    // Enterprise ERP Logic: Credit Note Strict Validation
+    if (docType === 'NC') {
+      if (!related_document) {
+        return ApiResponse.error('Nota de Crédito exige a Fatura Original (related_document) obrigatória.');
+      }
+      const { data: origInv } = await admin.from('invoices').select('id, total, status, invoice_number').eq('id', related_document).eq('company_id', companyId).maybeSingle();
+      if (!origInv) return ApiResponse.error('Fatura original não encontrada.', 404);
+      if (origInv.status === 'cancelled') return ApiResponse.error('Não é possível emitir Nota de Crédito para uma Fatura anulada.');
+
+      const { data: previousNCs } = await admin.from('invoices').select('total')
+        .eq('related_document', related_document).eq('document_type', 'NC').neq('status', 'cancelled');
+      
+      const alreadyCredited = (previousNCs || []).reduce((sum, nc) => sum + Number(nc.total || 0), 0);
+      const maxAllowedCredit = Number(origInv.total) - alreadyCredited;
+      
+      if (total > maxAllowedCredit) {
+        return ApiResponse.error(`Valor da Nota de Crédito (${total} Kz) excede o limite disponível da Fatura Original ${origInv.invoice_number} (${maxAllowedCredit.toFixed(2)} Kz).`);
+      }
+    }
+
     // 1. Batch fetch all relevant products to avoid N queries
     const productIds = cleanItems.map(it => it.product_id).filter(Boolean);
     const { data: products } = productIds.length > 0 

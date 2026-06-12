@@ -74,7 +74,7 @@ export async function POST(req: Request) {
         total_sales:      Number(total_sales ?? 0),
         sales_count:      Number(sales_count ?? 0),
         tax_total:        Number(tax_total ?? 0),
-        difference:       Number(difference ?? 0),
+        difference:       Number(closing_balance ?? 0) - (Number(opening_balance ?? 0) + Number(total_cash ?? 0)),
         notes:            notes ?? null,
         hash,
       })
