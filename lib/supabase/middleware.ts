@@ -52,16 +52,23 @@ export async function updateSession(request: NextRequest) {
   const isAuthRoute = path.startsWith('/login') || path.startsWith('/register') || path.startsWith('/auth');
   const isGateRoute = path === '/pending' || path === '/rejected';
 
-  if (!user && !isAuthRoute) {
+  // Helper to redirect preserving cookies
+  const redirect = (toPath: string) => {
     const url = request.nextUrl.clone();
-    url.pathname = '/login';
-    return NextResponse.redirect(url);
+    url.pathname = toPath;
+    const redirectResponse = NextResponse.redirect(url);
+    response.cookies.getAll().forEach((c) => {
+      redirectResponse.cookies.set(c.name, c.value, c);
+    });
+    return redirectResponse;
+  };
+
+  if (!user && !isAuthRoute) {
+    return redirect('/login');
   }
 
   if (user && isAuthRoute && path !== '/auth/callback') {
-    const url = request.nextUrl.clone();
-    url.pathname = '/dashboard';
-    return NextResponse.redirect(url);
+    return redirect('/dashboard');
   }
 
   // Authenticated users on gate routes: OK, just pass through

@@ -15,7 +15,7 @@ type CtxCacheValue = {
   expiresAt: number;
 };
 const CTX_CACHE = new Map<string, CtxCacheValue>();
-const CTX_TTL_MS = 60_000; // 60s — profile/company rarely change
+const CTX_TTL_MS = 10_000; // 10s — brief cache to survive page load jumps, prevents stale status loops
 const CTX_MAX_SIZE = 500;
 
 /**
@@ -98,7 +98,8 @@ export const getCurrentUserContext = cache(async () => {
   const ctx = await loadContextFromDb();
   if (!ctx) return null;
 
-  if (token) {
+  const status = ctx.profile?.status;
+  if (token && status !== 'pending' && status !== 'rejected') {
     CTX_CACHE.set(token, {
       user: ctx.user,
       profile: ctx.profile,
