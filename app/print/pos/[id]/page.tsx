@@ -1,117 +1,205 @@
 import { createAdminClient } from '@/lib/supabase/server';
-import { formatAOA, formatDateTime } from '@/lib/utils';
 import { notFound } from 'next/navigation';
+import QRCode from 'qrcode';
 
 export const dynamic = 'force-dynamic';
+
+function fmtAOA(n: any) {
+  return `${Number(n ?? 0).toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Kz`;
+}
+function fmtDate(d: any) {
+  if (!d) return '';
+  return new Date(d).toLocaleString('pt-AO', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+function esc(s: any) {
+  return String(s ?? '').replace(/[&<>"']/g, (c: string) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
+}
 
 export default async function PosReceiptPrintPage({ params }: { params: { id: string } }) {
   const admin = createAdminClient();
 
   const { data: invoice } = await admin
     .from('invoices')
-    .select('*, items:invoice_items(*), company:companies(*), client:clients(*)')
+    .select('*, items:invoice_items(*), company:companies(*)')
     .eq('id', params.id)
     .maybeSingle();
 
   if (!invoice) return notFound();
 
-  const company = invoice.company;
-  const docTypeLabels: Record<string, string> = {
-    FT: 'Fatura', FR: 'Fatura-Recibo', NC: 'Nota de Crédito',
-    ND: 'Nota de Débito', RC: 'Recibo', PP: 'Pró-forma', GT: 'Guia de Transporte'
+  const { data: fcfg } = await admin
+    .from('fiscal_config')
+    .select('mode, agt_certificado_numero')
+    .eq('company_id', invoice.company_id)
+    .maybeSingle();
+
+  const company = invoice.company ?? {};
+  const items = invoice.items ?? [];
+
+  const DOC_LABELS: Record<string, string> = {
+    FT: 'FATURA', FR: 'FATURA-RECIBO', NC: 'NOTA CRÉDITO',
+    ND: 'NOTA DÉBITO', RC: 'RECIBO', PP: 'PRÓ-FORMA', GT: 'GUIA TRANSPORTE',
   };
-  const docLabel = docTypeLabels[invoice.document_type] || invoice.document_type;
+  const docLabel = DOC_LABELS[invoice.document_type] ?? invoice.document_type;
+
+  // QR Code for receipt
+  const qrPayload = [
+    company.nif ?? '', invoice.client_nif ?? '', invoice.invoice_number ?? '',
+    String(invoice.issued_at ?? '').slice(0, 10),
+    Number(invoice.total ?? 0).toFixed(2),
+    Number(invoice.tax ?? 0).toFixed(2),
+    String(invoice.hash ?? '').slice(0, 16),
+  ].join('|');
+  let qrDataUrl = '';
+  try { qrDataUrl = await QRCode.toDataURL(qrPayload, { width: 120, margin: 2, errorCorrectionLevel: 'M' }); } catch {}
+
+  const certFooter = fcfg?.agt_certificado_numero
+    ? `Cert. AGT Nº ${fcfg.agt_certificado_numero}`
+    : 'Proc. por programa certificado AGT';
+
+  const hashShort = invoice.hash ? String(invoice.hash).slice(0, 4).toUpperCase() : '';
 
   return (
-    <div className="bg-white text-black flex justify-center">
-      <div className="w-[80mm] p-4 text-sm font-mono leading-tight bg-white print:m-0 print:p-4">
-        <div className="text-center mb-2 space-y-1">
-          <h1 className="font-bold text-lg uppercase">{company.name}</h1>
-          <div>NIF: {company.nif}</div>
-          {company.address && <div className="text-xs">{company.address}</div>}
+    <div style={{ background: '#f5f5f5', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px 0' }}>
+      
+      {/* Instrução visible on screen, hidden on print */}
+      <div style={{ background: '#0b4a6f', color: 'white', padding: '10px 20px', borderRadius: '8px', marginBottom: '16px', fontSize: '13px', maxWidth: '300px', textAlign: 'center' }} className="print:hidden">
+        📄 Clique em <strong>Imprimir</strong> no diálogo do browser para enviar para a impressora
+      </div>
+
+      {/* Talão 80mm — centro */}
+      <div
+        style={{
+          width: '80mm',
+          background: 'white',
+          fontFamily: "'Courier New', Courier, monospace",
+          fontSize: '11px',
+          lineHeight: '1.4',
+          padding: '4mm',
+          boxShadow: '0 2px 12px rgba(0,0,0,0.15)',
+        }}
+        className="print:shadow-none print:m-0"
+      >
+        {/* Cabeçalho empresa */}
+        <div style={{ textAlign: 'center', marginBottom: '8px' }}>
+          <div style={{ fontWeight: 'bold', fontSize: '14px', textTransform: 'uppercase', letterSpacing: '1px' }}>{company.name}</div>
+          <div style={{ fontSize: '10px' }}>NIF: {company.nif}</div>
+          {company.address && <div style={{ fontSize: '10px' }}>{company.address}</div>}
+          {company.phone && <div style={{ fontSize: '10px' }}>Tel: {company.phone}</div>}
+          {company.email && <div style={{ fontSize: '9px' }}>{company.email}</div>}
         </div>
 
-        <div className="text-center font-bold uppercase border-t border-b border-dashed border-black py-1 mb-2">
-          <div>{docLabel}</div>
-          <div>{invoice.invoice_number}</div>
+        {/* Linha separadora */}
+        <div style={{ borderTop: '1px dashed #000', margin: '6px 0' }} />
+
+        {/* Tipo e número */}
+        <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '12px' }}>{docLabel}</div>
+        <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '11px' }}>{invoice.invoice_number}</div>
+
+        <div style={{ borderTop: '1px dashed #000', margin: '6px 0' }} />
+
+        {/* Dados */}
+        <div style={{ fontSize: '10px', marginBottom: '4px' }}>
+          <div>Data: {fmtDate(invoice.issued_at)}</div>
+          <div>Cliente: {invoice.client_name || 'Consumidor Final'}</div>
+          <div>NIF: {invoice.client_nif || '000000000'}</div>
+          {invoice.payment_method && <div>Pagamento: {invoice.payment_method}</div>}
         </div>
 
-        <div className="mb-2 text-xs space-y-0.5">
-          <div>Data: {formatDateTime(invoice.issued_at)}</div>
-          <div>Cliente: {invoice.client_name}</div>
-          <div>NIF: {invoice.client_nif}</div>
-          
-          {invoice.document_type === 'PP' && invoice.valid_until && (
-            <div className="mt-1 font-bold">Válido até: {formatDateTime(invoice.valid_until).split(' ')[0]}</div>
-          )}
-          
-          {invoice.document_type === 'GT' && invoice.transport_details && (
-            <div className="mt-1 border-t border-dashed border-gray-400 pt-1">
-              <div>Carga: {invoice.transport_details.loadLocation}</div>
-              <div>Descarga: {invoice.transport_details.unloadLocation}</div>
-              <div>Matrícula: {invoice.transport_details.licensePlate}</div>
-              {invoice.transport_details.startDate && <div>Início: {formatDateTime(invoice.transport_details.startDate)}</div>}
-            </div>
-          )}
-        </div>
+        <div style={{ borderTop: '1px dashed #000', margin: '6px 0' }} />
 
-        <table className="w-full text-xs mb-2">
-          <thead className="border-b border-black">
-            <tr>
-              <th className="text-left py-1">Qtd</th>
-              <th className="text-left py-1">Artigo</th>
-              <th className="text-right py-1">Total</th>
+        {/* Itens */}
+        <table style={{ width: '100%', fontSize: '10px', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr style={{ borderBottom: '1px solid #000' }}>
+              <th style={{ textAlign: 'left', paddingBottom: '3px', fontWeight: 'bold' }}>Artigo</th>
+              <th style={{ textAlign: 'center', width: '24px', fontWeight: 'bold' }}>Qtd</th>
+              <th style={{ textAlign: 'right', fontWeight: 'bold' }}>Total</th>
             </tr>
           </thead>
           <tbody>
-            {invoice.items?.map((item: any) => (
-              <tr key={item.id}>
-                <td className="py-1 align-top">{item.quantity}</td>
-                <td className="py-1 align-top pr-1">{item.description}</td>
-                <td className="py-1 align-top text-right whitespace-nowrap">{formatAOA(item.total)}</td>
+            {items.map((item: any, i: number) => (
+              <tr key={i} style={{ verticalAlign: 'top' }}>
+                <td style={{ paddingTop: '4px', paddingRight: '4px' }}>
+                  <div>{item.description?.slice(0, 28)}</div>
+                  <div style={{ color: '#555', fontSize: '9px' }}>
+                    {fmtAOA(item.price)} x {item.quantity} (IVA {item.tax_rate}%)
+                  </div>
+                </td>
+                <td style={{ paddingTop: '4px', textAlign: 'center' }}>{item.quantity}</td>
+                <td style={{ paddingTop: '4px', textAlign: 'right', whiteSpace: 'nowrap' }}>{fmtAOA(item.total)}</td>
               </tr>
             ))}
           </tbody>
         </table>
 
-        <div className="border-t border-black pt-1 space-y-0.5 text-xs mb-2">
-          <div className="flex justify-between">
-            <span>Subtotal:</span>
-            <span>{formatAOA(invoice.subtotal)}</span>
+        <div style={{ borderTop: '1px dashed #000', margin: '6px 0' }} />
+
+        {/* Totais */}
+        <div style={{ fontSize: '10px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span>Subtotal s/ IVA:</span><span>{fmtAOA(invoice.subtotal)}</span>
           </div>
-          <div className="flex justify-between">
-            <span>IVA:</span>
-            <span>{formatAOA(invoice.tax)}</span>
-          </div>
-          <div className="flex justify-between font-bold text-sm mt-1 border-t border-dashed border-black pt-1">
-            <span>TOTAL:</span>
-            <span>{formatAOA(invoice.total)}</span>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span>IVA {Number(items[0]?.tax_rate ?? 14).toFixed(0)}%:</span><span>{fmtAOA(invoice.tax)}</span>
           </div>
         </div>
 
-        {invoice.amount_paid > 0 && (
-          <div className="text-center border-t border-dashed border-black py-1 mb-2 text-xs font-bold">
-            PAGO: {formatAOA(invoice.amount_paid)}
+        <div style={{ borderTop: '2px solid #000', margin: '4px 0' }} />
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '13px' }}>
+          <span>TOTAL:</span><span>{fmtAOA(invoice.total)}</span>
+        </div>
+
+        {Number(invoice.amount_paid ?? 0) > 0 && (
+          <div style={{ marginTop: '4px', fontSize: '10px', borderTop: '1px dashed #000', paddingTop: '4px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ fontWeight: 'bold' }}>PAGO:</span><span>{fmtAOA(invoice.amount_paid)}</span>
+            </div>
+            {Number(invoice.amount_paid) > Number(invoice.total) && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
+                <span>TROCO:</span><span>{fmtAOA(Number(invoice.amount_paid) - Number(invoice.total))}</span>
+              </div>
+            )}
           </div>
         )}
 
-        <div className="text-center text-[10px] space-y-1 mt-4">
-          <p>Obrigado pela preferência!</p>
-          <div className="break-all border border-gray-300 p-1 text-[8px]">
-            {invoice.hash ? `${invoice.hash.substring(0, 4)} - Processado por programa certificado nº 0000/AGT` : 'Sem assinatura'}
+        <div style={{ borderTop: '1px dashed #000', margin: '8px 0' }} />
+
+        {/* QR Code — verificação AGT */}
+        {qrDataUrl && (
+          <div style={{ textAlign: 'center', marginBottom: '6px' }}>
+            <img src={qrDataUrl} width={100} height={100} style={{ display: 'inline-block' }} alt="QR AGT" />
+            <div style={{ fontSize: '8px', color: '#555', marginTop: '2px' }}>Verificação AGT</div>
           </div>
-          <p className="font-bold">FaturaAO</p>
+        )}
+
+        {/* Hash AGT */}
+        {hashShort && (
+          <div style={{ fontSize: '9px', textAlign: 'center', marginBottom: '4px', color: '#333' }}>
+            Hash: {hashShort}...
+          </div>
+        )}
+
+        {/* Rodapé */}
+        <div style={{ textAlign: 'center', fontSize: '9px', marginTop: '6px', borderTop: '1px dashed #000', paddingTop: '6px' }}>
+          <div style={{ fontWeight: 'bold', fontSize: '10px' }}>Obrigado pela preferência!</div>
+          <div style={{ marginTop: '3px' }}>{certFooter}</div>
+          <div style={{ marginTop: '3px', fontWeight: 'bold' }}>FaturaAO · Angola</div>
         </div>
+
+        {/* Espaço de corte */}
+        <div style={{ marginTop: '12px' }} />
       </div>
-      <style dangerouslySetInnerHTML={{__html: `
+
+      <style dangerouslySetInnerHTML={{ __html: `
         @media print {
-          @page { margin: 0; size: 80mm 297mm; }
-          body, html { width: 80mm; margin: 0; padding: 0; font-family: monospace; background: white; }
+          @page { size: 80mm auto; margin: 0; }
+          body { background: white !important; }
+          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
         }
-      `}} />
-      <script dangerouslySetInnerHTML={{__html: `
-        window.onload = function() { setTimeout(function(){ window.print(); }, 500); }
-      `}} />
+      ` }} />
+      <script dangerouslySetInnerHTML={{ __html: `window.onload = function(){ setTimeout(function(){ window.print(); }, 700); }` }} />
     </div>
   );
 }
