@@ -401,7 +401,7 @@ ${taxTable}
     const isCreditNote = docType === 'NC';
     const isDebitNote = docType === 'ND';
     const amountTag = isCreditNote ? 'DebitAmount' : 'CreditAmount';
-    const hashVal = inv.hash && String(inv.hash).length >= 8 ? String(inv.hash) : '0';
+    const hashVal = inv.signature || (inv.hash && String(inv.hash).length >= 8 ? String(inv.hash) : '0');
 
     const itemLines = (inv.items || []).map((it, idx) => {
       const key = String(it.description || '').trim().toLowerCase();
@@ -489,7 +489,7 @@ ${itemLines}
   /* ---------- Payments (RC — Recibos) --- AGT: secção separada ---------- */
   const paymentEntries = paymentsList.map(inv => {
     const isCancelled = inv.status === 'cancelled';
-    const hashVal = inv.hash && String(inv.hash).length >= 8 ? String(inv.hash) : '0';
+    const hashVal = inv.signature || (inv.hash && String(inv.hash).length >= 8 ? String(inv.hash) : '0');
     return `      <Payment>
         <PaymentRefNo>${esc(inv.invoice_number)}</PaymentRefNo>
         <Period>${new Date(inv.issued_at).getUTCMonth() + 1}</Period>
