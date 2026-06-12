@@ -245,7 +245,7 @@ export default function AppShell({ children, user, company, isPlatformAdmin, rol
         </div>
         <div className="flex items-center gap-2">
           <NotificationBell />
-          <button onClick={() => setOpen(!open)} className="p-2 rounded hover:bg-[#093c5a] transition-colors">
+          <button onClick={() => setOpen(!open)} className="p-2.5 rounded-lg hover:bg-[#093c5a] transition-colors active:scale-95">
             {open ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
           </button>
         </div>

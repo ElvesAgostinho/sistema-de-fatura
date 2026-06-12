@@ -111,20 +111,62 @@
 
 @layer components {
   .ms-card {
-    @apply bg-card rounded-md;
+    @apply bg-card rounded-lg p-4 md:p-6;
     box-shadow: var(--shadow-sm);
     transition: box-shadow 0.2s ease;
   }
   .ms-card:hover { box-shadow: var(--shadow-md); }
 
+  /* ── Botões: mínimo 44px de altura para toque (Apple HIG / WCAG) ── */
   .ms-btn-primary {
-    @apply bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2 rounded-md font-medium text-sm transition-colors inline-flex items-center gap-2;
+    @apply bg-primary text-primary-foreground hover:bg-primary/90
+           px-4 min-h-[44px] rounded-md font-medium text-sm
+           transition-colors inline-flex items-center gap-2
+           active:scale-[0.97] select-none;
+  }
+
+  .ms-btn-secondary {
+    @apply bg-secondary text-secondary-foreground hover:bg-secondary/80
+           border border-border px-4 min-h-[44px] rounded-md font-medium text-sm
+           transition-colors inline-flex items-center gap-2
+           active:scale-[0.97] select-none;
+  }
+
+  .ms-btn-ghost {
+    @apply text-foreground hover:bg-secondary px-3 min-h-[44px] rounded-md
+           font-medium text-sm transition-colors inline-flex items-center gap-2
+           active:scale-[0.97] select-none;
+  }
+
+  .ms-btn-danger {
+    @apply bg-destructive/10 text-destructive hover:bg-destructive/20
+           border border-destructive/30 px-4 min-h-[44px] rounded-md font-medium text-sm
+           transition-colors inline-flex items-center gap-2
+           active:scale-[0.97] select-none;
+  }
+
+  /* Ícone-botão: área táctil mínima 44px */
+  .ms-icon-btn {
+    @apply w-11 h-11 rounded-lg flex items-center justify-center
+           hover:bg-secondary transition-colors active:scale-95 select-none;
   }
 
   .stat-card {
-    @apply bg-card p-6 rounded-md;
+    @apply bg-card p-4 md:p-6 rounded-lg;
     box-shadow: var(--shadow-sm);
     transition: all 0.2s ease;
   }
   .stat-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+
+  /* Tabelas responsivas */
+  .ms-table-container {
+    @apply w-full overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0;
+  }
+
+  /* Form inputs — altura mínima táctil */
+  .ms-input {
+    @apply w-full min-h-[44px] px-3 rounded-md border border-input
+           bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring
+           placeholder:text-muted-foreground;
+  }
 }

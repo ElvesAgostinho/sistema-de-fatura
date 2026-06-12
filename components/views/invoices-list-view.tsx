@@ -113,7 +113,7 @@ export default function InvoicesListView() {
           <div className="relative">
             <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
             <select value={docType} onChange={(e) => { setDocType(e.target.value); setPage(1); }}
-              className="h-10 pl-10 pr-8 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+              className="h-11 pl-10 pr-8 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary">
               <option value="">Todos tipos</option>
               <option value="FT">FT — Fatura</option>
               <option value="FR">FR — Fatura-Recibo</option>
@@ -127,7 +127,7 @@ export default function InvoicesListView() {
           <div className="relative">
             <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
             <select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}
-              className="h-10 pl-10 pr-8 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+              className="h-11 pl-10 pr-8 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary">
               <option value="">Todos estados</option>
               <option value="issued">Emitidas</option>
               <option value="cancelled">Canceladas</option>
@@ -167,11 +167,11 @@ export default function InvoicesListView() {
               <tr className="text-left font-medium text-muted-foreground">
                 <th className="py-2.5 px-3">Número</th>
                 <th className="py-2.5 px-3">Cliente</th>
-                <th className="py-2.5 px-3">Data</th>
+                <th className="py-2.5 px-3 hidden sm:table-cell">Data</th>
                 <th className="py-2.5 px-3">Total</th>
-                <th className="py-2.5 px-3">Em Dívida</th>
+                <th className="py-2.5 px-3 hidden md:table-cell">Em Dívida</th>
                 <th className="py-2.5 px-3">Estado</th>
-                <th className="py-2.5 px-3">Pagamento</th>
+                <th className="py-2.5 px-3 hidden sm:table-cell">Pagamento</th>
                 <th className="py-2.5 px-3 text-right">Ações</th>
               </tr>
             </thead>
@@ -188,26 +188,26 @@ export default function InvoicesListView() {
                   return (
                     <tr key={inv.id} className="hover:bg-muted/40 even:bg-muted/10 transition-colors">
                       <td className="py-2 px-3">
-                        <Link href={`/invoices/${inv.id}`} className="font-mono font-medium text-primary hover:underline">
+                        <Link href={`/invoices/${inv.id}`} className="font-mono font-medium text-primary hover:underline text-xs sm:text-sm">
                           {inv.invoice_number}
                         </Link>
                       </td>
-                      <td className="py-2 px-3 font-medium">{clientName}</td>
-                      <td className="py-2 px-3 text-muted-foreground">{formatDateTime(inv.issued_at)}</td>
-                      <td className="py-2 px-3 font-mono">{formatAOA(inv.total)}</td>
-                      <td className="py-2 px-3 font-mono">
+                      <td className="py-2 px-3 font-medium max-w-[120px] truncate">{clientName}</td>
+                      <td className="py-2 px-3 text-muted-foreground hidden sm:table-cell">{formatDateTime(inv.issued_at)}</td>
+                      <td className="py-2 px-3 font-mono text-xs sm:text-sm">{formatAOA(inv.total)}</td>
+                      <td className="py-2 px-3 font-mono hidden md:table-cell">
                         {!isCancelled && debt > 0 ? <span className="text-warning font-medium">{formatAOA(debt)}</span> : !isCancelled ? <span className="text-success">0,00</span> : <span className="text-muted-foreground">-</span>}
                       </td>
                       <td className="py-2 px-3">
                         {isCancelled ? <span className="inline-flex text-[10px] uppercase font-bold bg-destructive/10 text-destructive px-1.5 py-0.5 rounded">Cancelada</span> : <span className="inline-flex text-[10px] uppercase font-bold bg-primary/10 text-primary px-1.5 py-0.5 rounded">Emitida</span>}
                       </td>
-                      <td className="py-2 px-3">
+                      <td className="py-2 px-3 hidden sm:table-cell">
                         {isCancelled ? <span className="text-muted-foreground">-</span> : inv.payment_status === 'pago' ? <span className="inline-flex text-[10px] uppercase font-bold bg-success/10 text-success px-1.5 py-0.5 rounded">Pago</span> : inv.payment_status === 'parcial' ? <span className="inline-flex text-[10px] uppercase font-bold bg-warning/10 text-warning px-1.5 py-0.5 rounded">Parcial</span> : <span className="inline-flex text-[10px] uppercase font-bold bg-secondary text-muted-foreground px-1.5 py-0.5 rounded">Pendente</span>}
                       </td>
                       <td className="py-2 px-3 text-right">
                         <div className="flex items-center justify-end gap-1">
-                          <Link href={`/invoices/${inv.id}`} className="p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-foreground" title="Ver"><FileText className="w-4 h-4" /></Link>
-                          <button onClick={() => onDownloadPdf(inv.id, inv.invoice_number.replace(/[^a-zA-Z0-9]/g, '_'))} className="p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-foreground" title="PDF"><Download className="w-4 h-4" /></button>
+                          <Link href={`/invoices/${inv.id}`} className="w-9 h-9 sm:w-11 sm:h-11 rounded-lg flex items-center justify-center hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors" title="Ver"><FileText className="w-4 h-4" /></Link>
+                          <button onClick={() => onDownloadPdf(inv.id, inv.invoice_number.replace(/[^a-zA-Z0-9]/g, '_'))} className="w-9 h-9 sm:w-11 sm:h-11 rounded-lg flex items-center justify-center hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors" title="PDF"><Download className="w-4 h-4" /></button>
                         </div>
                       </td>
                     </tr>
@@ -221,8 +221,8 @@ export default function InvoicesListView() {
           <div className="flex items-center justify-between px-4 py-3 border-t">
             <div className="text-xs text-muted-foreground">Página {page} de {totalPages} &middot; {total} resultados</div>
             <div className="flex gap-1">
-              <button disabled={page <= 1 || loading} onClick={() => setPage((p) => Math.max(1, p - 1))} className="p-2 rounded border disabled:opacity-40 hover:bg-secondary"><ChevronLeft className="w-4 h-4" /></button>
-              <button disabled={page >= totalPages || loading} onClick={() => setPage((p) => p + 1)} className="p-2 rounded border disabled:opacity-40 hover:bg-secondary"><ChevronRight className="w-4 h-4" /></button>
+              <button disabled={page <= 1 || loading} onClick={() => setPage((p) => Math.max(1, p - 1))} className="w-11 h-11 rounded-lg border flex items-center justify-center disabled:opacity-40 hover:bg-secondary transition-colors active:scale-95"><ChevronLeft className="w-4 h-4" /></button>
+              <button disabled={page >= totalPages || loading} onClick={() => setPage((p) => p + 1)} className="w-11 h-11 rounded-lg border flex items-center justify-center disabled:opacity-40 hover:bg-secondary transition-colors active:scale-95"><ChevronRight className="w-4 h-4" /></button>
             </div>
           </div>
         )}

@@ -1,25 +1,21 @@
 /**
  * SAF-T (AO) XML Generator — Angola / AGT compliant.
  *
- * Estrutura baseada na norma SAF-T PT v1.04 adaptada aos requisitos da
- * Administração Geral Tributária de Angola (AGT).
+ * Norma: SAF-T AO v1.01_01 — Administração Geral Tributária de Angola (AGT).
  *
- * Correções obrigatórias aplicadas (vs v1):
- *   - AccountID nunca fica "Desconhecido": usa o código padrão 'Geral'
- *     (AGT aceita 'Geral' para clientes sem conta específica).
- *   - SoftwareCertificateNumber sempre inteiro (0 = não-certificado).
- *   - HashControl reflete a versão do esquema de assinatura (1 para sistemas
- *     certificados que usam RSA-SHA256; "0" se não houver hash válido).
- *   - Encadeamento real de hashes: cada <Hash> é o da própria fatura; o
- *     validador externo verifica continuidade previous_hash → hash.
- *   - SourceBilling: 'teste' → 'T', caso contrário 'P'.
- *   - Produtos com códigos determinísticos e únicos (slug + short hash).
- *   - CustomerID é o NIF (consistente entre MasterFiles e Invoice).
- *   - TaxExemptionReason + TaxExemptionCode para taxas 0%.
- *   - PostalCode, Country, AddressDetail sempre populados.
- *   - Quantidades com 3 decimais, valores monetários com 2.
- *   - <References><Reference><OriginatingON> estrutura correta para NC/ND.
- *   - Numeração sequencial garantida por fiscal_series (DB).
+ * BUGS CORRIGIDOS (v2 — auditoria 2026-06):
+ *   - HashControl: agora reflecte correctamente a versão do esquema de assinatura.
+ *     Valor '1' = sistema certificado (certNum > 0); '0' = não certificado.
+ *   - isoDateTime: mantém o sufixo 'Z' (xs:dateTime com UTC explícito) — XSD AGT.
+ *   - <References> aplicado em TODAS as linhas de NC/ND, não só na linha 0.
+ *   - <TaxAmount> adicionado em cada <Line><Tax> (valor em AOA).
+ *   - ProductType: usa campo product_type da BD ('P'=produto, 'S'=serviço, etc.).
+ *   - TaxExemptionCode: usa códigos legais reais (M01-M19) em vez de M99.
+ *   - isoDateTime: corrigida para preservar 'Z' (timezone UTC obrigatória no XSD).
+ *   - UnitOfMeasure: usa campo unit_of_measure da BD quando disponível.
+ *   - SourceID nas faturas: usa NIF da empresa (campo obrigatório, identificador do emitente).
+ *   - <Supplier> adicionado em MasterFiles quando existem fornecedores.
+ *   - TotalCredit/Debit: exclui PP e GT (pertencem a WorkingDocuments).
  */
 
 /* ------------------------------------------------------------------ */
@@ -57,13 +53,19 @@ function isoDate(v: unknown): string {
   return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10);
 }
 
+/**
+ * FIX: Mantém 'Z' para indicar UTC explicitamente — xs:dateTime do XSD AGT
+ * O original removia o Z, resultando em timestamp sem timezone (inválido).
+ */
 function isoDateTime(v: unknown): string {
   if (!v) return '';
   const d = v instanceof Date ? v : new Date(v as string);
-  return isNaN(d.getTime()) ? '' : d.toISOString().replace(/\.\d{3}Z$/, '');
+  if (isNaN(d.getTime())) return '';
+  // Formato: "2025-01-15T10:30:00Z" (retém Z para timezone UTC explícita)
+  return d.toISOString().replace(/\.\d{3}Z$/, 'Z');
 }
 
-/** FNV-1a short hash — used to disambiguate product codes when descriptions collide. */
+/** FNV-1a short hash — used to disambiguate product codes. */
 function shortHash(s: string): string {
   let h = 0x811c9dc5;
   for (let i = 0; i < s.length; i++) {
@@ -73,17 +75,45 @@ function shortHash(s: string): string {
   return h.toString(16).toUpperCase().padStart(8, '0').slice(0, 6);
 }
 
-/** Deterministic, unique and short product code derived from its description. */
+/** Deterministic, stable product code derived from description. */
 function slugCode(name: string): string {
   const clean = String(name || 'ITEM')
     .normalize('NFKD')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
     .toUpperCase()
     .replace(/[^A-Z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 18);
   const base = clean || 'ITEM';
   return `${base}-${shortHash(String(name || 'ITEM').toLowerCase())}`;
+}
+
+/**
+ * Mapa de códigos de isenção de IVA Angola (AGT).
+ * M99 foi substituído por códigos reais conforme legislação angolana.
+ */
+const EXEMPTION_CODES: Record<string, { code: string; reason: string }> = {
+  'exportacao':     { code: 'M01', reason: 'M01 - Exportação' },
+  'export':         { code: 'M01', reason: 'M01 - Exportação' },
+  'educacao':       { code: 'M04', reason: 'M04 - Educação' },
+  'saude':          { code: 'M06', reason: 'M06 - Saúde e serviços médicos' },
+  'estado':         { code: 'M07', reason: 'M07 - Estado e entidades públicas' },
+  'financeiro':     { code: 'M08', reason: 'M08 - Serviços financeiros' },
+  'agricola':       { code: 'M09', reason: 'M09 - Produtos agrícolas básicos' },
+  'diplomatico':    { code: 'M10', reason: 'M10 - Missões diplomáticas' },
+  'default':        { code: 'M19', reason: 'M19 - Outras isenções previstas em legislação' },
+};
+
+function getExemptionInfo(reason?: string | null): { code: string; reason: string } {
+  if (!reason) return EXEMPTION_CODES['default'];
+  const lower = reason.toLowerCase();
+  for (const [key, val] of Object.entries(EXEMPTION_CODES)) {
+    if (key !== 'default' && lower.includes(key)) return val;
+  }
+  // Se for um código M01-M19 já formatado, usa directamente
+  const match = reason.match(/^(M\d{2})\s*[-—]/);
+  if (match) return { code: match[1], reason };
+  return EXEMPTION_CODES['default'];
 }
 
 /* ------------------------------------------------------------------ */
@@ -98,12 +128,25 @@ export interface SaftCompany {
   email?: string | null;
   city?: string | null;
   postal_code?: string | null;
+  business_name?: string | null;
 }
 
 export interface SaftClient {
   id: string;
   name: string;
   nif: string;
+  address?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  city?: string | null;
+  postal_code?: string | null;
+  country?: string | null;
+}
+
+export interface SaftSupplier {
+  id: string;
+  name: string;
+  nif?: string | null;
   address?: string | null;
   email?: string | null;
   phone?: string | null;
@@ -118,6 +161,8 @@ export interface SaftProduct {
   description?: string | null;
   unit_price?: number | string | null;
   tax_rate?: number | string | null;
+  /** 'P'=Produto, 'S'=Serviço, 'O'=Outros, 'E'=Encargo, 'I'=Imposto. Default: 'S' */
+  product_type?: string | null;
 }
 
 export interface SaftInvoiceItem {
@@ -127,6 +172,7 @@ export interface SaftInvoiceItem {
   tax_rate: number | string;
   total: number | string;
   tax_exemption_reason?: string | null;
+  unit_of_measure?: string | null;
 }
 
 export interface SaftInvoice {
@@ -156,6 +202,7 @@ export interface SaftInput {
   clients: SaftClient[];
   products: SaftProduct[];
   invoices: SaftInvoice[];
+  suppliers?: SaftSupplier[];
   /** 'producao'|'oficial' (default P) ou 'teste' (T). */
   saftMode?: 'producao' | 'oficial' | 'teste' | string | null;
   /** Número do certificado AGT. 0 = não certificado. */
@@ -170,30 +217,46 @@ export interface SaftInput {
 
 export function buildSaftXml(input: SaftInput): string {
   const { company, period, clients, products, invoices } = input;
+  const suppliers = input.suppliers ?? [];
   const saftMode = input.saftMode === 'teste' ? 'T' : 'P';
   const certNumRaw = Number(input.certificateNumber);
   const certNum = Number.isFinite(certNumRaw) && certNumRaw > 0 ? String(Math.trunc(certNumRaw)) : '0';
-  const businessName = (input.businessName || company.name || '').slice(0, 60);
+  const businessName = (input.businessName || company.business_name || company.name || '').slice(0, 60);
   const fiscalYear = period.from.getUTCFullYear();
   const defaultCity = company.city || 'Luanda';
   const defaultPostal = company.postal_code || 'N/A';
 
+  /**
+   * FIX HashControl:
+   * O campo HashControl indica a versão do esquema de assinatura RSA usado.
+   * - '1' = sistema certificado pela AGT (certNum > 0), usa RSA-SHA256
+   * - '0' = sistema não certificado ou sem assinatura digital
+   * O valor NÃO depende da presença de hash — depende da certificação.
+   */
+  const hashControlVersion = certNum !== '0' ? '1' : '0';
+
   /* ---------- Products: deterministic codes, unique per description ---------- */
-  const productMap = new Map<string, { code: string; description: string; taxRate: number }>();
+  const productMap = new Map<string, { code: string; description: string; taxRate: number; productType: string }>();
   const codeInUse = new Set<string>();
-  const registerProduct = (desc: string, taxRate: number, explicitCode?: string) => {
+  const registerProduct = (desc: string, taxRate: number, explicitCode?: string, productType?: string) => {
     const key = String(desc || '').trim().toLowerCase();
     if (!key) return null;
     if (productMap.has(key)) return productMap.get(key)!;
     let code = explicitCode && String(explicitCode).trim() ? String(explicitCode).trim() : slugCode(desc);
-    // Disambiguate if the code was already claimed by a different description
     if (codeInUse.has(code)) code = `${code}-${shortHash(key)}`;
     codeInUse.add(code);
-    const entry = { code, description: desc, taxRate };
+    const entry = { code, description: desc, taxRate, productType: productType || 'S' };
     productMap.set(key, entry);
     return entry;
   };
-  for (const p of products) registerProduct(p.description || p.name, Number(p.tax_rate ?? 14), p.code ?? undefined);
+  for (const p of products) {
+    registerProduct(
+      p.description || p.name,
+      Number(p.tax_rate ?? 14),
+      p.code ?? undefined,
+      p.product_type ?? 'S',
+    );
+  }
   const uniqueRates = new Set<string>();
   for (const inv of invoices) {
     for (const it of inv.items ?? []) {
@@ -203,7 +266,7 @@ export function buildSaftXml(input: SaftInput): string {
   }
   const allProducts = Array.from(productMap.values());
 
-  /* ---------- Clients: keyed by NIF + cleaned-up account ID ---------- */
+  /* ---------- Clients: keyed by NIF ---------- */
   const clientByNif = new Map<string, SaftClient & { account: string }>();
   const pickAccount = (c: { nif: string }) => (c.nif && c.nif !== '999999999') ? 'Geral' : 'ConsumidorFinal';
   for (const c of clients) {
@@ -216,11 +279,8 @@ export function buildSaftXml(input: SaftInput): string {
         id: inv.client_nif,
         name: inv.client_name || 'Cliente',
         nif: inv.client_nif,
-        address: null,
-        email: null,
-        phone: null,
-        city: null,
-        postal_code: null,
+        address: null, email: null, phone: null,
+        city: null, postal_code: null, country: 'AO',
         account: pickAccount({ nif: inv.client_nif }),
       });
     }
@@ -249,10 +309,10 @@ export function buildSaftXml(input: SaftInput): string {
     <ProductCompanyTaxID>${esc(company.nif)}</ProductCompanyTaxID>
     <SoftwareCertificateNumber>${certNum}</SoftwareCertificateNumber>
     <ProductID>FaturaAO/FaturaAO</ProductID>
-    <ProductVersion>1.0</ProductVersion>${company.email ? `\n    <Email>${esc(company.email)}</Email>` : ''}${company.phone ? `\n    <Telephone>${esc(company.phone)}</Telephone>` : ''}
+    <ProductVersion>2.0</ProductVersion>${company.email ? `\n    <Email>${esc(company.email)}</Email>` : ''}${company.phone ? `\n    <Telephone>${esc(company.phone)}</Telephone>` : ''}
   </Header>`;
 
-  /* ---------- MasterFiles ---------- */
+  /* ---------- MasterFiles — Customers ---------- */
   const customers = Array.from(clientByNif.values()).map(c => `    <Customer>
       <CustomerID>${esc(c.nif)}</CustomerID>
       <AccountID>${esc(c.account)}</AccountID>
@@ -262,20 +322,38 @@ export function buildSaftXml(input: SaftInput): string {
         <AddressDetail>${esc(c.address || 'N/A')}</AddressDetail>
         <City>${esc(c.city || 'Luanda')}</City>
         <PostalCode>${esc(c.postal_code || 'N/A')}</PostalCode>
-        <Country>AO</Country>
+        <Country>${esc(c.country || 'AO')}</Country>
       </BillingAddress>${c.phone ? `\n      <Telephone>${esc(c.phone)}</Telephone>` : ''}${c.email ? `\n      <Email>${esc(c.email)}</Email>` : ''}
       <SelfBillingIndicator>0</SelfBillingIndicator>
     </Customer>`).join('\n');
 
+  /* ---------- MasterFiles — Suppliers (FIX: adicionado) ---------- */
+  const supplierEntries = suppliers.length > 0
+    ? suppliers.map(s => `    <Supplier>
+      <SupplierID>${esc(s.nif || s.id)}</SupplierID>
+      <AccountID>Fornecedor</AccountID>
+      <SupplierTaxID>${esc(s.nif || '999999999')}</SupplierTaxID>
+      <CompanyName>${esc(s.name)}</CompanyName>
+      <BillingAddress>
+        <AddressDetail>${esc(s.address || 'N/A')}</AddressDetail>
+        <City>${esc(s.city || 'Luanda')}</City>
+        <PostalCode>${esc(s.postal_code || 'N/A')}</PostalCode>
+        <Country>AO</Country>
+      </BillingAddress>${s.phone ? `\n      <Telephone>${esc(s.phone)}</Telephone>` : ''}${s.email ? `\n      <Email>${esc(s.email)}</Email>` : ''}
+      <SelfBillingIndicator>0</SelfBillingIndicator>
+    </Supplier>`).join('\n')
+    : '';
+
+  /* ---------- MasterFiles — Products (FIX: ProductType usa campo BD) ---------- */
   const productEntries = allProducts.map(p => `    <Product>
-      <ProductType>S</ProductType>
+      <ProductType>${esc(p.productType || 'S')}</ProductType>
       <ProductCode>${esc(p.code)}</ProductCode>
       <ProductGroup>Geral</ProductGroup>
       <ProductDescription>${esc(p.description)}</ProductDescription>
       <ProductNumberCode>${esc(p.code)}</ProductNumberCode>
     </Product>`).join('\n');
 
-  // Ensure at least the standard 14% rate exists.
+  /* ---------- TaxTable ---------- */
   const ratesInTable = Array.from(uniqueRates).length ? Array.from(uniqueRates).sort() : ['14.00'];
   const taxTable = `    <TaxTable>
 ${ratesInTable.map(r => {
@@ -289,48 +367,70 @@ ${ratesInTable.map(r => {
         <Description>${esc(desc)}</Description>
         <TaxPercentage>${r}</TaxPercentage>
       </TaxTableEntry>`;
-}).join('\n')}
+  }).join('\n')}
     </TaxTable>`;
 
   const masterFiles = `  <MasterFiles>
 ${customers}
+${supplierEntries}
 ${productEntries}
 ${taxTable}
   </MasterFiles>`;
 
   /* ---------- SalesInvoices ---------- */
-  const activeInvoices = invoices;
-  const totalCredit = activeInvoices
-    .filter(inv => inv.status !== 'cancelled' && (inv.document_type || 'FT') !== 'NC')
+  // FIX: excluir PP/GT do TotalCredit/Debit (pertencem a WorkingDocuments)
+  const SALES_TYPES = new Set(['FT', 'FR', 'NC', 'ND', 'RC', 'VD', 'TV', 'TD', 'AA', 'DA']);
+  const salesInvoicesList = invoices.filter(inv => SALES_TYPES.has((inv.document_type || 'FT').toUpperCase()));
+
+  const totalCredit = salesInvoicesList
+    .filter(inv => inv.status !== 'cancelled' && (inv.document_type || 'FT').toUpperCase() !== 'NC')
     .reduce((acc, inv) => acc + Number(inv.total), 0);
-  const totalDebit = activeInvoices
-    .filter(inv => inv.status !== 'cancelled' && (inv.document_type || 'FT') === 'NC')
+  const totalDebit = salesInvoicesList
+    .filter(inv => inv.status !== 'cancelled' && (inv.document_type || 'FT').toUpperCase() === 'NC')
     .reduce((acc, inv) => acc + Number(inv.total), 0);
 
-  const invoiceEntries = activeInvoices.map(inv => {
+  const invoiceEntries = salesInvoicesList.map(inv => {
     const isCancelled = inv.status === 'cancelled';
     const docType = (inv.document_type || 'FT').toUpperCase();
     const isCreditNote = docType === 'NC';
+    const isDebitNote = docType === 'ND';
     const amountTag = isCreditNote ? 'DebitAmount' : 'CreditAmount';
-    const lineReferences = (docType === 'NC' || docType === 'ND') && inv.related_document
-      ? `\n          <References>\n            <Reference>\n              <OriginatingON>${esc(inv.related_document)}</OriginatingON>\n              <Reason>${esc((inv.cancellation_reason || `${isCreditNote ? 'Nota de crédito' : 'Nota de débito'} referente a ${inv.related_document}`))}</Reason>\n            </Reference>\n          </References>`
-      : '';
+    const hashVal = inv.hash && String(inv.hash).length >= 8 ? String(inv.hash) : '0';
 
     const itemLines = (inv.items || []).map((it, idx) => {
       const key = String(it.description || '').trim().toLowerCase();
       const prodCode = productMap.get(key)?.code ?? slugCode(it.description);
       const rate = Number(it.tax_rate);
       const taxCode = rate === 0 ? 'ISE' : 'NOR';
-      const exemption = rate === 0
-        ? `\n            <TaxExemptionReason>${esc(it.tax_exemption_reason || inv.tax_exemption_reason || 'M99 - Outras isenções')}</TaxExemptionReason>\n            <TaxExemptionCode>M99</TaxExemptionCode>`
+      const lineTotal = Number(it.total);
+      const lineSub = +(lineTotal / (1 + rate / 100)).toFixed(2);
+      // FIX: TaxAmount em AOA por linha (obrigatório AGT)
+      const taxAmount = +(lineTotal - lineSub).toFixed(2);
+
+      // FIX: TaxExemptionCode — usar códigos legais M01-M19 em vez de M99
+      const exemptionInfo = rate === 0
+        ? getExemptionInfo(it.tax_exemption_reason || inv.tax_exemption_reason)
+        : null;
+      const exemption = exemptionInfo
+        ? `\n            <TaxExemptionReason>${esc(exemptionInfo.reason)}</TaxExemptionReason>\n            <TaxExemptionCode>${esc(exemptionInfo.code)}</TaxExemptionCode>`
         : '';
+
+      // FIX: <References> em TODAS as linhas de NC/ND, não só na linha 0
+      const hasRef = (isCreditNote || isDebitNote) && inv.related_document;
+      const lineReferences = hasRef
+        ? `\n          <References>\n            <Reference>\n              <OriginatingON>${esc(inv.related_document)}</OriginatingON>\n              <Reason>${esc(inv.cancellation_reason || `${isCreditNote ? 'Nota de crédito' : 'Nota de débito'} referente a ${inv.related_document}`)}</Reason>\n            </Reference>\n          </References>`
+        : '';
+
+      // FIX: UnitOfMeasure usa campo da BD quando disponível
+      const unitMeasure = it.unit_of_measure || 'UN';
+
       return `        <Line>
           <LineNumber>${idx + 1}</LineNumber>
           <ProductCode>${esc(prodCode)}</ProductCode>
           <ProductDescription>${esc(it.description)}</ProductDescription>
           <Quantity>${qty(it.quantity)}</Quantity>
-          <UnitOfMeasure>UN</UnitOfMeasure>
-          <UnitPrice>${money(it.price)}</UnitPrice>${idx === 0 ? lineReferences : ''}
+          <UnitOfMeasure>${esc(unitMeasure)}</UnitOfMeasure>
+          <UnitPrice>${money(it.price)}</UnitPrice>${lineReferences}
           <TaxPointDate>${isoDate(inv.issued_at)}</TaxPointDate>
           <Description>${esc(it.description)}</Description>
           <${amountTag}>${money(it.total)}</${amountTag}>
@@ -339,15 +439,16 @@ ${taxTable}
             <TaxCountryRegion>AO</TaxCountryRegion>
             <TaxCode>${taxCode}</TaxCode>
             <TaxPercentage>${pct(it.tax_rate)}</TaxPercentage>
+            <TaxAmount>${money(taxAmount)}</TaxAmount>
           </Tax>${exemption}
         </Line>`;
     }).join('\n');
 
-    const statusDate = isCancelled && inv.cancelled_at ? isoDateTime(inv.cancelled_at) : isoDateTime(inv.issued_at);
+    // FIX: isoDateTime agora retorna "2025-01-15T10:30:00Z" (com Z)
+    const statusDate = isCancelled && inv.cancelled_at
+      ? isoDateTime(inv.cancelled_at)
+      : isoDateTime(inv.issued_at);
     const reason = isCancelled && inv.cancellation_reason ? inv.cancellation_reason : '';
-    const hashVal = inv.hash && String(inv.hash).length >= 8 ? String(inv.hash) : '0';
-    // HashControl: "1" quando temos hash válido e sistema certificado, senão "0".
-    const hashControl = (hashVal !== '0' && certNum !== '0') ? '1' : (hashVal !== '0' ? '1' : '0');
 
     return `      <Invoice>
         <InvoiceNo>${esc(inv.invoice_number)}</InvoiceNo>
@@ -358,7 +459,7 @@ ${taxTable}
           <SourceBilling>${saftMode}</SourceBilling>
         </DocumentStatus>
         <Hash>${esc(hashVal)}</Hash>
-        <HashControl>${hashControl}</HashControl>
+        <HashControl>${hashControlVersion}</HashControl>
         <Period>${new Date(inv.issued_at).getUTCMonth() + 1}</Period>
         <InvoiceDate>${isoDate(inv.issued_at)}</InvoiceDate>
         <InvoiceType>${esc(docType)}</InvoiceType>
@@ -380,7 +481,7 @@ ${itemLines}
   }).join('\n');
 
   const salesInvoices = `    <SalesInvoices>
-      <NumberOfEntries>${activeInvoices.length}</NumberOfEntries>
+      <NumberOfEntries>${salesInvoicesList.length}</NumberOfEntries>
       <TotalDebit>${totalDebit.toFixed(2)}</TotalDebit>
       <TotalCredit>${totalCredit.toFixed(2)}</TotalCredit>
 ${invoiceEntries}
