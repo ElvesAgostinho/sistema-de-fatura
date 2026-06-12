@@ -413,45 +413,152 @@ function PaymentModal({ total, method, onMethodChange, onConfirm, onClose, proce
   );
 }
 
-/* ─── SessionModal ─────────────────────────────────────────────────────────── */
-function SessionModal({ onOpen, onClose }: { onOpen: (n: string, b: number) => void; onClose: () => void }) {
-  const [name, setName] = useState('Caixa 1');
-  const [balance, setBalance] = useState('0');
+/* ─── SessionModal — Professional Supermarket Flow ──────────────────────────── */
+function SessionModal({ onOpen, onClose, isCaixa = false }: {
+  onOpen: (n: string, b: number) => void;
+  onClose: () => void;
+  isCaixa?: boolean;
+}) {
+  const [name,    setName]    = useState('Caixa 1');
+  const [balance, setBalance] = useState('');
+  const [opening, setOpening] = useState(false);
+
+  const TERMINALS     = ['Caixa 1', 'Caixa 2', 'Caixa 3', 'Caixa 4'];
+  const QUICK_AMOUNTS = [5000, 10000, 20000, 50000, 100000, 200000];
+  const NUMPAD        = ['7','8','9','4','5','6','1','2','3','000','0','⌫'];
+
+  const numpadPress = (val: string) =>
+    setBalance(prev => {
+      if (val === '⌫') return prev.slice(0, -1);
+      if (val === '000') return prev + '000';
+      return prev + val;
+    });
+
+  const balanceNum = parseFloat(balance) || 0;
+
+  const handleOpen = async () => {
+    if (opening) return;
+    setOpening(true);
+    await onOpen(name, balanceNum);
+    setOpening(false);
+  };
+
   return (
-    <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center" style={{ background: 'rgba(9,60,90,0.65)', backdropFilter: 'blur(4px)' }} onClick={onClose}>
-      <div className="w-full sm:max-w-sm rounded-t-3xl sm:rounded-2xl shadow-2xl overflow-hidden" style={{ background: XERO.card }} onClick={e => e.stopPropagation()}>
-        <div className="px-5 py-4" style={{ background: XERO.navy }}>
-          <h3 className="text-white font-bold text-base flex items-center gap-2">
-            <BarChart3 className="w-4 h-4" style={{ color: XERO.cyan }} />
-            Abrir Sessão de Caixa
-          </h3>
-        </div>
-        <div className="p-5 space-y-3" style={{ background: XERO.bg }}>
-          <div>
-            <label className="text-xs font-semibold uppercase tracking-wider mb-1 block" style={{ color: XERO.muted }}>Nome da caixa</label>
-            <input value={name} onChange={e => setName(e.target.value)}
-              className="w-full rounded-lg border px-4 py-2.5 text-sm focus:outline-none focus:border-[#13b5ea] transition-colors"
-              style={{ borderColor: XERO.border, color: XERO.text, background: XERO.card }} />
+    <div
+      className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center"
+      style={{ background: 'rgba(9,60,90,0.95)', backdropFilter: 'blur(10px)' }}
+      onClick={isCaixa ? undefined : onClose}
+    >
+      <div
+        className="w-full sm:max-w-sm rounded-t-3xl sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col"
+        style={{ background: '#fff', maxHeight: '96dvh' }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="px-5 py-4 shrink-0" style={{ background: '#0b4a6f' }}>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: '#13b5ea' }}>
+              <Calculator className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h3 className="text-white font-black text-lg">Abrir Caixa</h3>
+              <p className="text-white/50 text-xs">Declare o fundo inicial para começar o turno</p>
+            </div>
           </div>
+        </div>
+
+        <div className="overflow-y-auto flex-1 px-4 py-4 space-y-4 bg-slate-50">
+
+          {/* Terminal selector */}
           <div>
-            <label className="text-xs font-semibold uppercase tracking-wider mb-1 block" style={{ color: XERO.muted }}>Fundo de caixa (Kz)</label>
-            <input type="number" value={balance} onChange={e => setBalance(e.target.value)}
-              className="w-full rounded-lg border px-4 py-2.5 text-sm focus:outline-none focus:border-[#13b5ea] transition-colors"
-              style={{ borderColor: XERO.border, color: XERO.text, background: XERO.card }} />
+            <label className="text-[10px] font-black uppercase tracking-widest mb-2 block text-slate-400">
+              Terminal
+            </label>
+            <div className="grid grid-cols-4 gap-1.5">
+              {TERMINALS.map(t => (
+                <button key={t} onClick={() => setName(t)}
+                  className="py-2 rounded-lg text-xs font-bold border-2 transition-all active:scale-95"
+                  style={{
+                    background:   name === t ? '#0b4a6f' : '#fff',
+                    borderColor:  name === t ? '#13b5ea' : '#e2e8f0',
+                    color:        name === t ? '#fff' : '#64748b',
+                  }}>
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Amount display */}
+          <div>
+            <label className="text-[10px] font-black uppercase tracking-widest mb-2 block text-slate-400">
+              Fundo de Caixa
+            </label>
+            <div className="rounded-2xl border-2 px-5 py-4 text-right bg-white"
+              style={{ borderColor: balanceNum > 0 ? '#13b5ea' : '#e2e8f0' }}>
+              <p className="text-4xl font-black tabular-nums text-slate-800">
+                {balanceNum > 0 ? balanceNum.toLocaleString('pt-AO') : '0'}
+              </p>
+              <p className="text-xs text-slate-400 mt-0.5">Kwanzas (Kz)</p>
+            </div>
+          </div>
+
+          {/* Quick amounts */}
+          <div className="grid grid-cols-3 gap-1.5">
+            {QUICK_AMOUNTS.map(a => (
+              <button key={a} onClick={() => setBalance(String(a))}
+                className="py-2.5 rounded-xl text-xs font-black border-2 transition-all active:scale-95"
+                style={{
+                  background:  balanceNum === a ? '#f59e0b15' : '#fff',
+                  borderColor: balanceNum === a ? '#f59e0b' : '#e2e8f0',
+                  color:       balanceNum === a ? '#f59e0b' : '#64748b',
+                }}>
+                {a >= 1000 ? `${a/1000}k` : a}
+              </button>
+            ))}
+          </div>
+
+          {/* Numpad */}
+          <div className="grid grid-cols-3 gap-2">
+            {NUMPAD.map(k => (
+              <button key={k} onClick={() => numpadPress(k)}
+                className="py-4 rounded-xl font-black text-xl border-2 transition-all active:scale-95 active:shadow-inner"
+                style={{
+                  background:  k === '⌫' ? '#fee2e2' : '#fff',
+                  borderColor: k === '⌫' ? '#fca5a5' : '#e2e8f0',
+                  color:       k === '⌫' ? '#ef4444' : '#1e293b',
+                }}>
+                {k}
+              </button>
+            ))}
           </div>
         </div>
-        <div className="flex gap-2 px-5 py-4 border-t" style={{ borderColor: XERO.border, background: XERO.card }}>
-          <button onClick={onClose} className="flex-1 py-3 rounded-lg font-semibold text-sm border transition-colors hover:bg-slate-50" style={{ borderColor: XERO.border, color: XERO.muted }}>Cancelar</button>
-          <button onClick={() => onOpen(name, parseFloat(balance) || 0)}
-            className="flex-1 py-3 rounded-lg font-bold text-sm text-white transition-all hover:opacity-90 active:scale-[0.98]"
-            style={{ background: XERO.cyan }}>
-            Abrir Caixa
+
+        {/* Confirm button */}
+        <div className="px-4 py-4 shrink-0 border-t border-slate-100 bg-white">
+          <button
+            onClick={handleOpen}
+            disabled={opening}
+            className="w-full py-4 rounded-2xl font-black text-xl text-white transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-3 shadow-xl"
+            style={{ background: opening ? '#64748b' : '#13b5ea' }}
+          >
+            {opening
+              ? <><Loader2 className="w-6 h-6 animate-spin" /> A abrir…</>
+              : <><CheckCircle2 className="w-6 h-6" /> Iniciar Turno</>
+            }
           </button>
+          {!isCaixa && (
+            <button onClick={onClose}
+              className="w-full mt-2 py-2 text-xs font-medium text-slate-400 hover:text-slate-600 transition-colors">
+              Cancelar (entrar sem sessão)
+            </button>
+          )}
         </div>
       </div>
     </div>
   );
 }
+
 
 /* ─── DiscountModal ────────────────────────────────────────────────────────── */
 function DiscountModal({ productId, current, onApply, onClose }: {
@@ -590,15 +697,19 @@ export default function POSView() {
     }
 
     // 2. Fetch session + company first (fast) — products second
+    let hasSession = false;
     try {
       const [sR, cR] = await Promise.all([
         fetch('/api/pos/session'),
         fetch('/api/company'),
       ]);
       const [sJ, cJ] = await Promise.all([sR.json(), cR.json()]);
-      if (sJ.session) setSession(sJ.session);
+      if (sJ.session) { setSession(sJ.session); hasSession = true; }
       if (cJ.company) setCompanyInfo(cJ.company);
     } catch {}
+
+    // ✨ PROFESSIONAL: auto-open session modal if no session found
+    if (!hasSession) setShowSession(true);
 
     // 3. Fetch products (heavier — but loading=false already if cached)
     if (!cached) setLoading(true);
@@ -1041,38 +1152,18 @@ export default function POSView() {
           className="flex flex-col w-[300px] sm:w-[340px] lg:w-[380px] shrink-0 relative"
           style={{ background: XERO.card }}
         >
-          {/* ⚠️ SESSION GATE — blocks cart/checkout when no session open */}
-          {!session && (
+          {/* ⚠️ SESSION GATE — visual hint only, modal handles the real gate */}
+          {!session && !loading && (
             <div
-              className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-4 text-center px-6"
-              style={{
-                background: `${XERO.navy}f0`,
-                backdropFilter: 'blur(4px)',
-              }}
+              className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-3 text-center px-6"
+              style={{ background: `${XERO.navy}f2`, backdropFilter: 'blur(6px)' }}
             >
-              <div
-                className="w-16 h-16 rounded-2xl flex items-center justify-center"
-                style={{ background: XERO.warning + '20', border: `2px solid ${XERO.warning}40` }}
-              >
-                <Shield className="w-8 h-8" style={{ color: XERO.warning }} />
+              <div className="w-14 h-14 rounded-2xl flex items-center justify-center animate-pulse"
+                style={{ background: XERO.warning + '20', border: `2px solid ${XERO.warning}50` }}>
+                <Calculator className="w-7 h-7" style={{ color: XERO.warning }} />
               </div>
-              <div>
-                <p className="font-black text-white text-lg mb-1">Caixa não aberta</p>
-                <p className="text-white/60 text-sm">
-                  Para realizar vendas, abra<br />a caixa primeiro.
-                </p>
-              </div>
-              <button
-                onClick={() => setShowSession(true)}
-                className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-white text-sm transition-all hover:opacity-90 active:scale-95"
-                style={{ background: XERO.warning }}
-              >
-                <Calculator className="w-4 h-4" />
-                Abrir Caixa
-              </button>
-              <p className="text-white/30 text-[10px]">
-                Pode continuar a navegar nos produtos
-              </p>
+              <p className="font-black text-white text-base">A abrir caixa…</p>
+              <p className="text-white/50 text-xs">Aguarde o modal de abertura</p>
             </div>
           )}
 

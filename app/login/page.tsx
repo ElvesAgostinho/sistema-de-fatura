@@ -35,7 +35,15 @@ export default function LoginPage() {
         return;
       }
       toast.success('Bem-vindo!');
-      router.replace('/dashboard');
+      // Role-based redirect: caixa goes directly to POS
+      const meRes = await fetch('/api/auth/me');
+      const meJson = await meRes.json();
+      const role = meJson?.profile?.role;
+      if (role === 'caixa') {
+        router.replace('/pos');
+      } else {
+        router.replace('/dashboard');
+      }
     } catch (err: any) {
       toast.error(err?.message ?? 'Erro inesperado');
     } finally { setLoading(false); }
