@@ -162,91 +162,152 @@ function PaymentModal({
   const NUMPAD = ['7','8','9','4','5','6','1','2','3','.','0','⌫'];
   const METHODS: PaymentMethod[] = ['Dinheiro', 'Multicaixa', 'TPA', 'Crédito'];
 
+  // Smart quick amounts — deduplicated, human-readable labels
+  const quickAmounts = useMemo(() => {
+    const candidates = [
+      Math.ceil(total / 500) * 500,
+      Math.ceil(total / 1000) * 1000,
+      5000, 10000, 20000, 50000,
+    ];
+    const seen = new Set<number>();
+    return candidates
+      .filter(amt => { if (seen.has(amt) || amt <= 0) return false; seen.add(amt); return true; })
+      .slice(0, 4)
+      .map(amt => ({
+        amt,
+        label: amt >= 1000
+          ? `${(amt / 1000) % 1 === 0 ? amt / 1000 : (amt / 1000).toFixed(1)}k`
+          : `${amt}`,
+      }));
+  }, [total]);
+
+  const canConfirm = !processing && (method !== 'Dinheiro' || tenderedNum >= total);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-[#0f172a] border border-white/10 rounded-2xl w-full max-w-md p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold text-white">Pagamento</h2>
-          <button onClick={onClose} className="text-white/50 hover:text-white"><X className="w-5 h-5" /></button>
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      {/* Modal — bottom-sheet on mobile, centered on desktop. Always fits screen. */}
+      <div
+        className="bg-[#0f172a] border border-white/10 rounded-t-3xl sm:rounded-2xl w-full sm:max-w-md shadow-2xl flex flex-col max-h-[95dvh]"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Drag handle (mobile) */}
+        <div className="flex justify-center pt-3 pb-1 sm:hidden shrink-0">
+          <div className="w-10 h-1 rounded-full bg-white/20" />
         </div>
 
-        {/* Total */}
-        <div className="bg-sky-500/10 border border-sky-500/20 rounded-xl p-4 mb-5 text-center">
-          <p className="text-sm text-sky-300 mb-1">Total a pagar</p>
-          <p className="text-4xl font-black text-white tabular-nums">{kz(total)}</p>
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-3 shrink-0">
+          <h2 className="text-lg font-bold text-white">Pagamento</h2>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 text-white/50 hover:text-white">
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
-        {/* Payment methods */}
-        <div className="grid grid-cols-4 gap-2 mb-5">
-          {METHODS.map(m => (
-            <button
-              key={m}
-              onClick={() => onMethodChange(m)}
-              className={`flex flex-col items-center gap-1 py-3 rounded-xl border-2 text-xs font-semibold transition-all ${
-                method === m
-                  ? 'border-sky-500 bg-sky-500/15 text-sky-300'
-                  : 'border-white/10 bg-white/5 text-white/60 hover:border-white/30'
-              }`}
-            >
-              {PAYMENT_ICONS[m]}
-              {m}
-            </button>
-          ))}
-        </div>
+        {/* Scrollable body — never clips the confirm button */}
+        <div className="overflow-y-auto flex-1 px-5 pb-2 space-y-4">
+          {/* Total */}
+          <div className="bg-sky-500/10 border border-sky-500/20 rounded-2xl p-4 text-center">
+            <p className="text-xs text-sky-300 mb-1 uppercase tracking-wider">Total a pagar</p>
+            <p className="text-4xl font-black text-white tabular-nums">{kz(total)}</p>
+          </div>
 
-        {/* Cash input + numpad */}
-        {method === 'Dinheiro' && (
-          <>
-            <div className="mb-4">
-              <label className="text-xs text-white/50 mb-1 block">Valor entregue pelo cliente</label>
-              <input
-                ref={inputRef}
-                type="number"
-                value={tendered}
-                onChange={e => setTendered(e.target.value)}
-                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-3 text-xl font-bold text-white text-right tabular-nums focus:outline-none focus:border-sky-500"
-              />
-            </div>
+          {/* Payment methods */}
+          <div className="grid grid-cols-4 gap-2">
+            {METHODS.map(m => (
+              <button
+                key={m}
+                onClick={() => onMethodChange(m)}
+                className={`flex flex-col items-center gap-1.5 py-3 rounded-xl border-2 text-xs font-semibold transition-all ${
+                  method === m
+                    ? 'border-sky-500 bg-sky-500/15 text-sky-300'
+                    : 'border-white/10 bg-white/5 text-white/60 hover:border-white/30'
+                }`}
+              >
+                {PAYMENT_ICONS[m]}
+                {m}
+              </button>
+            ))}
+          </div>
 
-            {/* Quick amounts */}
-            <div className="grid grid-cols-4 gap-2 mb-4">
-              {[Math.ceil(total / 500) * 500, Math.ceil(total / 1000) * 1000, 5000, 10000].map(amt => (
-                <button key={amt} onClick={() => setTendered(amt.toFixed(2))}
-                  className="py-2 rounded-lg bg-white/5 hover:bg-white/10 text-xs font-semibold text-white/70 transition-colors">
-                  {(amt / 1000).toFixed(0)}k
-                </button>
-              ))}
-            </div>
-
-            {/* Numpad */}
-            <div className="grid grid-cols-3 gap-2 mb-5">
-              {NUMPAD.map(k => (
-                <button key={k} onClick={() => numpadPress(k)}
-                  className="py-3 rounded-xl bg-white/8 hover:bg-white/15 active:bg-white/20 text-lg font-semibold text-white transition-all">
-                  {k}
-                </button>
-              ))}
-            </div>
-
-            {/* Change */}
-            {change > 0 && (
-              <div className="flex items-center justify-between bg-green-500/10 border border-green-500/20 rounded-xl px-4 py-3 mb-4">
-                <span className="text-sm text-green-300 font-medium">Troco</span>
-                <span className="text-2xl font-black text-green-400 tabular-nums">{kz(change)}</span>
+          {/* Cash flow */}
+          {method === 'Dinheiro' && (
+            <>
+              <div>
+                <label className="text-xs text-white/50 mb-1.5 block">Valor entregue pelo cliente</label>
+                <input
+                  ref={inputRef}
+                  type="number"
+                  inputMode="decimal"
+                  value={tendered}
+                  onChange={e => setTendered(e.target.value)}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-2xl font-bold text-white text-right tabular-nums focus:outline-none focus:border-sky-500"
+                />
               </div>
-            )}
-          </>
-        )}
 
-        {/* Confirm */}
-        <button
-          onClick={() => onConfirm(tenderedNum)}
-          disabled={processing || (method === 'Dinheiro' && tenderedNum < total)}
-          className="w-full py-4 rounded-xl bg-gradient-to-r from-sky-600 to-sky-500 hover:from-sky-500 hover:to-sky-400 text-white font-bold text-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-        >
-          {processing ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle2 className="w-5 h-5" />}
-          {processing ? 'A processar...' : 'Confirmar Pagamento'}
-        </button>
+              {/* Quick amounts — deduplicated & correctly labelled */}
+              <div className="grid grid-cols-4 gap-2">
+                {quickAmounts.map(({ amt, label }) => (
+                  <button
+                    key={amt}
+                    onClick={() => setTendered(amt.toFixed(2))}
+                    className={`py-3 rounded-xl text-sm font-bold transition-all ${
+                      tenderedNum === amt
+                        ? 'bg-sky-600 text-white'
+                        : 'bg-white/8 hover:bg-white/15 text-white/70'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Numpad */}
+              <div className="grid grid-cols-3 gap-2">
+                {NUMPAD.map(k => (
+                  <button
+                    key={k}
+                    onClick={() => numpadPress(k)}
+                    className="py-4 rounded-xl bg-white/8 hover:bg-white/15 active:bg-sky-600/30 active:scale-95 text-xl font-semibold text-white transition-all"
+                  >
+                    {k}
+                  </button>
+                ))}
+              </div>
+
+              {/* Change */}
+              {change > 0 && (
+                <div className="flex items-center justify-between bg-green-500/10 border border-green-500/20 rounded-2xl px-5 py-3">
+                  <span className="text-sm text-green-300 font-semibold">Troco</span>
+                  <span className="text-2xl font-black text-green-400 tabular-nums">{kz(change)}</span>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Non-cash instruction */}
+          {method !== 'Dinheiro' && (
+            <div className="bg-white/5 border border-white/10 rounded-2xl p-5 text-center text-white/60 text-sm">
+              {method === 'Multicaixa' && '💳 Processe o pagamento no TPA Multicaixa'}
+              {method === 'TPA' && '📱 Aguarde confirmação do terminal TPA'}
+              {method === 'Crédito' && '📝 Venda registada a crédito — emite factura'}
+            </div>
+          )}
+        </div>
+
+        {/* ── CONFIRM — always visible, never clipped ── */}
+        <div className="px-5 py-4 border-t border-white/5 shrink-0 bg-[#0f172a]">
+          <button
+            onClick={() => onConfirm(tenderedNum)}
+            disabled={!canConfirm}
+            className="w-full py-4 rounded-2xl bg-gradient-to-r from-sky-600 to-sky-500 hover:from-sky-500 hover:to-sky-400 active:scale-[0.98] text-white font-black text-lg tracking-wide transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-sky-900/40"
+          >
+            {processing ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle2 className="w-5 h-5" />}
+            {processing ? 'A processar...' : 'Confirmar Pagamento'}
+          </button>
+        </div>
       </div>
     </div>
   );
