@@ -267,7 +267,6 @@ export default function SettingsView() {
         <div className="ms-card p-6 space-y-6">
           <h3 className="font-semibold flex items-center gap-2">
             <Palette className="w-4 h-4 text-primary" /> Aparência das Faturas PDF
-            <span className="ml-auto text-xs text-muted-foreground font-normal">Como no Xero · QuickBooks · SAP</span>
           </h3>
 
           <div className="grid lg:grid-cols-2 gap-6">
