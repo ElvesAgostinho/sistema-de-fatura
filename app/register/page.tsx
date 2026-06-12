@@ -19,7 +19,10 @@ export default function RegisterPage() {
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.nif || form.nif.length < 9) { toast.error('NIF inválido'); return; }
+    // Client-side validation
+    if (!form.nif || !/^\d{9,14}$/.test(form.nif.trim())) { toast.error('NIF inválido (deve ter entre 9 e 14 dígitos numéricos)'); return; }
+    if (!form.companyName.trim() || form.companyName.trim().length < 2) { toast.error('Nome da empresa obrigatório (mín 2 caracteres)'); return; }
+    if (form.password.length < 6) { toast.error('Senha deve ter pelo menos 6 caracteres'); return; }
     setLoading(true);
     try {
       // 1) Sign up via Supabase Auth

@@ -78,7 +78,7 @@ export async function middleware(request: NextRequest) {
         return jsonResponse(
           { error: 'Demasiadas tentativas. Tente novamente mais tarde.', retryAfter: reset },
           429,
-          { ...rlHeaders, 'Retry-After': String(Math.ceil((reset - Date.now()) / 1000)) }
+          { ...rlHeaders, 'Retry-After': String(Math.max(1, Math.ceil((reset - Date.now()) / 1000))) }
         );
       }
     }
@@ -100,7 +100,7 @@ export async function middleware(request: NextRequest) {
         return jsonResponse(
           { error: 'Limite de pedidos excedido. Tente novamente em breve.' },
           429,
-          { ...rlHeaders, 'Retry-After': String(Math.ceil((reset - Date.now()) / 1000)) }
+          { ...rlHeaders, 'Retry-After': String(Math.max(1, Math.ceil((reset - Date.now()) / 1000))) }
         );
       }
     }
