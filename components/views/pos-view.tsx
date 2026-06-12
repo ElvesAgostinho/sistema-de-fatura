@@ -574,21 +574,42 @@ export default function POSView() {
     return () => window.removeEventListener('keydown', h);
   }, [cart, lastSale]);
 
-  // ── Load ──────────────────────────────────────────────────────────────────
+  // ── Load (speed-optimised) ─────────────────────────────────────────────────
+  // Strategy: show cached products instantly → fetch fresh in background
   const loadData = useCallback(async () => {
-    setLoading(true);
+    // 1. Show cached products immediately (near-zero load time on revisit)
+    const CACHE_KEY = 'pos_products_v2';
+    const cached = sessionStorage.getItem(CACHE_KEY);
+    if (cached) {
+      try {
+        const prods: POSProduct[] = JSON.parse(cached);
+        setProducts(prods);
+        setCategories(Array.from(new Set(prods.map(p => p.category).filter(Boolean))) as string[]);
+        setLoading(false); // show immediately — refresh in background
+      } catch {}
+    }
+
+    // 2. Fetch session + company first (fast) — products second
     try {
-      const [pR, sR, cR] = await Promise.all([
-        fetch('/api/products?limit=500&active=true'),
+      const [sR, cR] = await Promise.all([
         fetch('/api/pos/session'),
         fetch('/api/company'),
       ]);
-      const [pJ, sJ, cJ] = await Promise.all([pR.json(), sR.json(), cR.json()]);
+      const [sJ, cJ] = await Promise.all([sR.json(), cR.json()]);
+      if (sJ.session) setSession(sJ.session);
+      if (cJ.company) setCompanyInfo(cJ.company);
+    } catch {}
+
+    // 3. Fetch products (heavier — but loading=false already if cached)
+    if (!cached) setLoading(true);
+    try {
+      const pR = await fetch('/api/products?limit=300&active=true');
+      const pJ = await pR.json();
       const prods: POSProduct[] = pJ.products ?? [];
       setProducts(prods);
       setCategories(Array.from(new Set(prods.map(p => p.category).filter(Boolean))) as string[]);
-      if (sJ.session) setSession(sJ.session);
-      if (cJ.company) setCompanyInfo(cJ.company);
+      // Cache for next time
+      try { sessionStorage.setItem(CACHE_KEY, JSON.stringify(prods)); } catch {}
     } catch { toast.error('Erro ao carregar produtos'); }
     finally { setLoading(false); }
   }, []);
@@ -758,16 +779,31 @@ export default function POSView() {
     finally { setProcessing(false); }
   };
 
-  // ── Loading ───────────────────────────────────────────────────────────────
-  if (loading) {
+  // ── Loading skeleton (shows immediately, never full-block) ────────────────
+  // Only blocks on FIRST load with no cache
+  if (loading && products.length === 0) {
     return (
-      <div className="fixed inset-0 flex items-center justify-center" style={{ background: XERO.bg }}>
-        <div className="text-center">
-          <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ background: XERO.cyan + '15' }}>
-            <ShoppingCart className="w-7 h-7 animate-pulse" style={{ color: XERO.cyan }} />
+      <div className="fixed inset-0 flex flex-col overflow-hidden" style={{ background: XERO.bg, paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+        {/* Skeleton TopBar */}
+        <div className="h-12 shrink-0 flex items-center gap-3 px-4" style={{ background: XERO.navy }}>
+          <div className="w-6 h-6 rounded animate-pulse" style={{ background: 'rgba(255,255,255,0.2)' }} />
+          <div className="w-24 h-4 rounded animate-pulse" style={{ background: 'rgba(255,255,255,0.15)' }} />
+          <div className="flex-1" />
+          <div className="w-16 h-6 rounded-full animate-pulse" style={{ background: 'rgba(255,255,255,0.15)' }} />
+        </div>
+        {/* Skeleton grid */}
+        <div className="flex-1 flex overflow-hidden">
+          <div className="flex-1 p-3 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2 content-start overflow-auto">
+            {Array.from({ length: 18 }).map((_, i) => (
+              <div key={i} className="h-24 rounded-lg animate-pulse" style={{ background: XERO.card, opacity: 1 - i * 0.03 }} />
+            ))}
           </div>
-          <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" style={{ color: XERO.cyan }} />
-          <p className="text-sm" style={{ color: XERO.muted }}>A carregar POS…</p>
+          <div className="w-72 shrink-0 border-l p-3 space-y-3 hidden lg:block" style={{ borderColor: XERO.border, background: XERO.card }}>
+            <div className="h-6 w-32 rounded animate-pulse" style={{ background: XERO.bg }} />
+            <div className="h-48 rounded-lg animate-pulse" style={{ background: XERO.bg }} />
+            <div className="h-16 rounded-xl animate-pulse" style={{ background: XERO.bg }} />
+            <div className="h-12 rounded-xl animate-pulse" style={{ background: XERO.cyan + '30' }} />
+          </div>
         </div>
       </div>
     );
@@ -1002,9 +1038,43 @@ export default function POSView() {
 
         {/* RIGHT — Cart */}
         <div
-          className="flex flex-col w-[300px] sm:w-[340px] lg:w-[380px] shrink-0"
+          className="flex flex-col w-[300px] sm:w-[340px] lg:w-[380px] shrink-0 relative"
           style={{ background: XERO.card }}
         >
+          {/* ⚠️ SESSION GATE — blocks cart/checkout when no session open */}
+          {!session && (
+            <div
+              className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-4 text-center px-6"
+              style={{
+                background: `${XERO.navy}f0`,
+                backdropFilter: 'blur(4px)',
+              }}
+            >
+              <div
+                className="w-16 h-16 rounded-2xl flex items-center justify-center"
+                style={{ background: XERO.warning + '20', border: `2px solid ${XERO.warning}40` }}
+              >
+                <Shield className="w-8 h-8" style={{ color: XERO.warning }} />
+              </div>
+              <div>
+                <p className="font-black text-white text-lg mb-1">Caixa não aberta</p>
+                <p className="text-white/60 text-sm">
+                  Para realizar vendas, abra<br />a caixa primeiro.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowSession(true)}
+                className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-white text-sm transition-all hover:opacity-90 active:scale-95"
+                style={{ background: XERO.warning }}
+              >
+                <Calculator className="w-4 h-4" />
+                Abrir Caixa
+              </button>
+              <p className="text-white/30 text-[10px]">
+                Pode continuar a navegar nos produtos
+              </p>
+            </div>
+          )}
 
           {/* Cart header */}
           <div
