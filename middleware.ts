@@ -62,7 +62,10 @@ export async function middleware(request: NextRequest) {
   }
 
   // ── 3. Rate Limiting — Auth endpoints (strict: 5 req/min per IP) ─────────────
-  if (path.startsWith('/api/auth') || path === '/login' || path === '/register') {
+  // Only throttle POST submissions (login/signup form), not page loads (GET).
+  const isAuthApiRoute = path.startsWith('/api/auth') || path === '/api/signup';
+  const isAuthPagePost = (path === '/login' || path === '/register') && request.method === 'POST';
+  if (isAuthApiRoute || isAuthPagePost) {
     if (authRateLimiter) {
       const { success, limit, reset, remaining } = await authRateLimiter.limit(ip);
       const rlHeaders = {

@@ -65,6 +65,38 @@ function FeatureCard({ icon: Icon, title, desc, delay }: { icon: any; title: str
   );
 }
 
+// ─── Testimonial Card ──────────────────────────────────────────────────────────
+function TestimonialCard({ name, company, text, stars, delay }: {
+  name: string; company: string; text: string; stars: number; delay: number;
+}) {
+  const { ref, inView } = useInView();
+  return (
+    <div
+      ref={ref}
+      className="testimonial-card"
+      style={{
+        opacity: inView ? 1 : 0,
+        transform: inView ? 'translateY(0)' : 'translateY(24px)',
+        transition: `opacity 0.6s ease ${delay}ms, transform 0.6s ease ${delay}ms`,
+      }}
+    >
+      <div className="testimonial-stars">
+        {Array.from({ length: stars }).map((_, si) => (
+          <Star key={si} style={{ width: 16, height: 16, fill: 'var(--gold)', color: 'var(--gold)' }} />
+        ))}
+      </div>
+      <p className="testimonial-text">"{text}"</p>
+      <div className="testimonial-author">
+        <div className="testimonial-avatar">{name[0]}</div>
+        <div>
+          <div className="testimonial-name">{name}</div>
+          <div className="testimonial-company">{company}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Pricing Card ──────────────────────────────────────────────────────────────
 function PricingCard({
   name, price, priceYear, desc, features, cta, ctaLink, highlighted, delay
@@ -393,35 +425,16 @@ export default function LandingPage() {
             <h2 className="section-title">Confiado por empresas angolanas</h2>
           </div>
           <div className="testimonials-grid">
-            {testimonials.map((t, i) => {
-              const { ref, inView } = useInView();
-              return (
-                <div
-                  key={i}
-                  ref={ref}
-                  className="testimonial-card"
-                  style={{
-                    opacity: inView ? 1 : 0,
-                    transform: inView ? 'translateY(0)' : 'translateY(24px)',
-                    transition: `opacity 0.6s ease ${i * 120}ms, transform 0.6s ease ${i * 120}ms`,
-                  }}
-                >
-                  <div className="testimonial-stars">
-                    {Array.from({ length: t.stars }).map((_, si) => (
-                      <Star key={si} style={{ width: 16, height: 16, fill: 'var(--gold)', color: 'var(--gold)' }} />
-                    ))}
-                  </div>
-                  <p className="testimonial-text">"{t.text}"</p>
-                  <div className="testimonial-author">
-                    <div className="testimonial-avatar">{t.name[0]}</div>
-                    <div>
-                      <div className="testimonial-name">{t.name}</div>
-                      <div className="testimonial-company">{t.company}</div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+            {testimonials.map((t, i) => (
+              <TestimonialCard
+                key={i}
+                name={t.name}
+                company={t.company}
+                text={t.text}
+                stars={t.stars}
+                delay={i * 120}
+              />
+            ))}
           </div>
         </div>
       </section>

@@ -1,4 +1,4 @@
-import { Redis } from '@upstash/redis';
+import { Redis } from '@upstash/redis/cloudflare';
 import { Ratelimit } from '@upstash/ratelimit';
 
 // Usar Upstash REST API para compatibilidade total com Edge Runtime (Vercel) e Next.js
