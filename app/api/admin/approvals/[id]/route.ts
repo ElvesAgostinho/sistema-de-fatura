@@ -10,10 +10,12 @@ export const dynamic = 'force-dynamic';
  * Platform-admin only. Approves or rejects a pending signup.
  */
 export async function POST(req: Request, { params }: { params: { id: string } }) {
-  const ctx = await getCurrentUserContext();
-  if (!ctx?.profile) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const isSuperAdmin = ctx.profile?.email === 'elvessacapuri57@gmail.com' || ctx.user?.email === 'elvessacapuri57@gmail.com' || ctx.profile?.is_platform_admin === true;
-  if (!isSuperAdmin) return NextResponse.json({ error: 'Forbidden: Apenas o administrador principal pode gerir aprovações' }, { status: 403 });
+  try {
+    const ctx = await getCurrentUserContext();
+    if (!ctx?.profile) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    // Use only the DB column — never hardcode emails in source code
+    const isPlatformAdmin = ctx.profile?.is_platform_admin === true;
+    if (!isPlatformAdmin) return NextResponse.json({ error: 'Forbidden: Apenas o administrador principal pode gerir aprovações' }, { status: 403 });
 
   const body = await req.json().catch(() => ({}));
   const action = body?.action as 'approve' | 'reject' | undefined;
@@ -77,5 +79,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     },
   });
 
-  return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true });
+  } catch (err: any) {
+    return NextResponse.json({ error: err?.message ?? 'Erro interno' }, { status: 500 });
+  }
 }

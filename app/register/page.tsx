@@ -31,10 +31,10 @@ export default function RegisterPage() {
       if (!auth?.user) { toast.error('Não foi possível criar conta'); return; }
 
       // 2) Create the company + user profile via our signup endpoint
+      // Note: userId is extracted server-side from the Supabase session (more secure)
       const resp = await fetch('/api/signup', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: auth.user.id,
           email: form.email,
           companyName: form.companyName,
           nif: form.nif,
