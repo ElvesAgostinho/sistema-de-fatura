@@ -42,9 +42,12 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#0078D4',
+  themeColor: '#0b4a6f',          // Xero navy — matches app header
   width: 'device-width',
   initialScale: 1,
+  maximumScale: 1,                // Prevent zoom on input focus (iOS)
+  userScalable: false,
+  viewportFit: 'cover',           // Enable safe-area-inset-* on notch/Dynamic Island
 };
 
 import { Inter } from 'next/font/google';

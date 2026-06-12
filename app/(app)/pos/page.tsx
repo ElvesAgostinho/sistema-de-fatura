@@ -1,14 +1,8 @@
-import type { Metadata } from 'next';
-import POSView from '@/components/views/pos-view';
+// This route is inside AppShell — redirect permanently to the standalone /pos route.
+import { redirect } from 'next/navigation';
 
-export const metadata: Metadata = {
-  title: 'POS — Ponto de Venda | FaturaAO',
-  description: 'Sistema de ponto de venda para retalho e supermercados',
-};
-
-// POS runs full-screen — dynamic to allow real-time operations
 export const dynamic = 'force-dynamic';
 
-export default function POSPage() {
-  return <POSView />;
+export default function OldPOSPage() {
+  redirect('/pos');
 }
