@@ -1,10 +1,15 @@
 import { Queue, QueueEvents } from 'bullmq';
-import Redis from 'ioredis';
 
-// Conexão IORedis genérica para as Filas (suporta Docker local ou Upstash Redis caso Upstash seja exposto via Redis TCP)
-const connection = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
+// Use a plain connection options object to avoid ioredis version conflicts
+// between the project's ioredis and bullmq's bundled ioredis.
+const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+const parsed = new URL(redisUrl);
+const connection = {
+  host: parsed.hostname,
+  port: parseInt(parsed.port) || 6379,
+  password: parsed.password || undefined,
   maxRetriesPerRequest: null,
-});
+} as any;
 
 /**
  * Fila principal do sistema FaturaAO.

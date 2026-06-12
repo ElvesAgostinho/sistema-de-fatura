@@ -116,7 +116,7 @@ export async function POST(req: Request) {
       const p = item.product_id ? productMap.get(item.product_id) : null;
       if (p && p.track_stock) {
         const newBalance = Number(p.quantity_in_stock ?? 0) + Number(item.quantity);
-        stockUpdatePromises.push(admin.from('products').update({ quantity_in_stock: newBalance }).eq('id', p.id));
+        stockUpdatePromises.push(Promise.resolve(admin.from('products').update({ quantity_in_stock: newBalance }).eq('id', p.id)));
         stockMovements.push({
           company_id: companyId, product_id: p.id, purchase_id: purchase.id,
           movement_type: 'compra', quantity: item.quantity, balance_after: newBalance,

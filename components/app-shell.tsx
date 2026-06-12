@@ -1,6 +1,6 @@
 'use client';
 
-import { FileText, LayoutDashboard, FilePlus, Users, Package, Banknote, BarChart3, Settings, LogOut, UserCheck, Menu, X, Calendar, Calculator, ChevronDown, Plus } from 'lucide-react';
+import { FileText, LayoutDashboard, FilePlus, Users, Package, Banknote, BarChart3, Settings, LogOut, UserCheck, Menu, X, Calendar, Calculator, ChevronDown, Plus, ShoppingCart } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
@@ -24,6 +24,8 @@ const getXeroMenus = (role?: string, isPlatformAdmin?: boolean) => {
     {
       title: 'Negócios',
       items: [
+        { href: '/pos', label: '🏪 Ponto de Venda (POS)' },
+        { divider: true },
         { href: '/invoices', label: 'Faturas de Clientes' },
         { href: '/invoices/new', label: 'Nova Fatura' },
         { href: '/recurring', label: 'Avenças' },
@@ -71,6 +73,8 @@ const getXeroMenus = (role?: string, isPlatformAdmin?: boolean) => {
     const negociosIndex = baseMenus.findIndex(m => m.title === 'Negócios');
     if (negociosIndex !== -1) {
       baseMenus[negociosIndex].items = [
+        { href: '/pos', label: '🏪 Ponto de Venda (POS)' },
+        { divider: true },
         { href: '/invoices', label: 'Faturas de Clientes' },
         { href: '/invoices/new', label: 'Nova Fatura' },
         { href: '/pos-close', label: 'Fecho de Caixa' },
