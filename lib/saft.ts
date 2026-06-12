@@ -182,9 +182,13 @@ export interface SaftInvoice {
   status: 'issued' | 'cancelled' | string;
   cancellation_reason?: string | null;
   cancelled_at?: string | Date | null;
+  /** Name or ID of the operator who issued the document (AGT §4.1.4.3 SourceID) */
+  operator_name?: string | null;
   subtotal: number | string;
   tax: number | string;
   total: number | string;
+  /** Discount amount in AOA (for Settlement element) */
+  discount?: number | string | null;
   hash?: string | null;
   previous_hash?: string | null;
   signature?: string | null;
@@ -377,10 +381,12 @@ ${productEntries}
 ${taxTable}
   </MasterFiles>`;
 
-  /* ---------- SalesInvoices ---------- */
-  // FIX: excluir PP/GT do TotalCredit/Debit (pertencem a WorkingDocuments)
-  const SALES_TYPES = new Set(['FT', 'FR', 'NC', 'ND', 'RC', 'VD', 'TV', 'TD', 'AA', 'DA']);
-  const salesInvoicesList = invoices.filter(inv => SALES_TYPES.has((inv.document_type || 'FT').toUpperCase()));
+  /* ---------- SalesInvoices (FT, FR, NC, ND, VD, TV, TD, AA, DA) ---------- */
+  // AGT: RC (Recibos de pagamento) pertencem a <Payments>, não a SalesInvoices
+  const SALES_TYPES  = new Set(['FT', 'FR', 'NC', 'ND', 'VD', 'TV', 'TD', 'AA', 'DA']);
+  const PAYMENT_TYPES = new Set(['RC']);
+  const salesInvoicesList  = invoices.filter(inv => SALES_TYPES.has((inv.document_type || 'FT').toUpperCase()));
+  const paymentsList       = invoices.filter(inv => PAYMENT_TYPES.has((inv.document_type || '').toUpperCase()));
 
   const totalCredit = salesInvoicesList
     .filter(inv => inv.status !== 'cancelled' && (inv.document_type || 'FT').toUpperCase() !== 'NC')
@@ -455,7 +461,7 @@ ${taxTable}
         <DocumentStatus>
           <InvoiceStatus>${isCancelled ? 'A' : 'N'}</InvoiceStatus>
           <InvoiceStatusDate>${statusDate}</InvoiceStatusDate>${reason ? `\n          <Reason>${esc(reason)}</Reason>` : ''}
-          <SourceID>${esc(company.nif)}</SourceID>
+          <SourceID>${esc(inv.operator_name || company.nif)}</SourceID>
           <SourceBilling>${saftMode}</SourceBilling>
         </DocumentStatus>
         <Hash>${esc(hashVal)}</Hash>
@@ -468,16 +474,62 @@ ${taxTable}
           <CashVATSchemeIndicator>0</CashVATSchemeIndicator>
           <ThirdPartiesBillingIndicator>0</ThirdPartiesBillingIndicator>
         </SpecialRegimes>
-        <SourceID>${esc(company.nif)}</SourceID>
+        <SourceID>${esc(inv.operator_name || company.nif)}</SourceID>
         <SystemEntryDate>${isoDateTime(inv.issued_at)}</SystemEntryDate>
         <CustomerID>${esc(inv.client_nif)}</CustomerID>
 ${itemLines}
         <DocumentTotals>
           <TaxPayable>${money(inv.tax)}</TaxPayable>
           <NetTotal>${money(inv.subtotal)}</NetTotal>
-          <GrossTotal>${money(inv.total)}</GrossTotal>
+          <GrossTotal>${money(inv.total)}</GrossTotal>${Number(inv.discount) > 0 ? `\n          <Settlement>\n            <SettlementAmount>${money(inv.discount)}</SettlementAmount>\n          </Settlement>` : ''}
         </DocumentTotals>
       </Invoice>`;
+  }).join('\n');
+
+  /* ---------- Payments (RC — Recibos) --- AGT: secção separada ---------- */
+  const paymentEntries = paymentsList.map(inv => {
+    const isCancelled = inv.status === 'cancelled';
+    const hashVal = inv.hash && String(inv.hash).length >= 8 ? String(inv.hash) : '0';
+    return `      <Payment>
+        <PaymentRefNo>${esc(inv.invoice_number)}</PaymentRefNo>
+        <Period>${new Date(inv.issued_at).getUTCMonth() + 1}</Period>
+        <TransactionDate>${isoDate(inv.issued_at)}</TransactionDate>
+        <PaymentType>RC</PaymentType>
+        <Description>Recibo de pagamento</Description>
+        <SystemEntryDate>${isoDateTime(inv.issued_at)}</SystemEntryDate>
+        <CustomerID>${esc(inv.client_nif || '000000000')}</CustomerID>
+        <DocumentStatus>
+          <PaymentStatus>${isCancelled ? 'A' : 'N'}</PaymentStatus>
+          <PaymentStatusDate>${isCancelled && inv.cancelled_at ? isoDateTime(inv.cancelled_at) : isoDateTime(inv.issued_at)}</PaymentStatusDate>${
+            isCancelled && inv.cancellation_reason ? `\n          <Reason>${esc(inv.cancellation_reason)}</Reason>` : ''}
+          <SourceID>${esc(inv.operator_name || company.nif)}</SourceID>
+          <SourcePayment>${saftMode}</SourcePayment>
+        </DocumentStatus>
+        <SourceID>${esc(inv.operator_name || company.nif)}</SourceID>
+        <Hash>${esc(hashVal)}</Hash>
+        <HashControl>${hashControlVersion}</HashControl>
+        <Line>
+          <LineNumber>1</LineNumber>
+          <SourceDocumentID>
+            <OriginatingON>${esc(inv.related_document || inv.invoice_number)}</OriginatingON>
+            <InvoiceDate>${isoDate(inv.issued_at)}</InvoiceDate>
+          </SourceDocumentID>
+          <SettlementAmount>${money(inv.total)}</SettlementAmount>
+          <CreditAmount>${money(inv.total)}</CreditAmount>
+          <Tax>
+            <TaxType>IVA</TaxType>
+            <TaxCountryRegion>AO</TaxCountryRegion>
+            <TaxCode>NOR</TaxCode>
+            <TaxPercentage>${pct(14)}</TaxPercentage>
+            <TaxAmount>${money(Number(inv.tax))}</TaxAmount>
+          </Tax>
+        </Line>
+        <DocumentTotals>
+          <TaxPayable>${money(inv.tax)}</TaxPayable>
+          <NetTotal>${money(inv.subtotal)}</NetTotal>
+          <GrossTotal>${money(inv.total)}</GrossTotal>
+        </DocumentTotals>
+      </Payment>`;
   }).join('\n');
 
   const salesInvoices = `    <SalesInvoices>
@@ -485,7 +537,7 @@ ${itemLines}
       <TotalDebit>${totalDebit.toFixed(2)}</TotalDebit>
       <TotalCredit>${totalCredit.toFixed(2)}</TotalCredit>
 ${invoiceEntries}
-    </SalesInvoices>`;
+    </SalesInvoices>${paymentsList.length > 0 ? `\n    <Payments>\n      <NumberOfEntries>${paymentsList.length}</NumberOfEntries>\n      <TotalDebit>0.00</TotalDebit>\n      <TotalCredit>${paymentsList.filter(p => p.status !== 'cancelled').reduce((s, p) => s + Number(p.total), 0).toFixed(2)}</TotalCredit>\n${paymentEntries}\n    </Payments>` : ''}`;
 
   const sourceDocuments = `  <SourceDocuments>
 ${salesInvoices}

@@ -744,12 +744,18 @@ export default function POSView() {
 
   // ── Cart ──────────────────────────────────────────────────────────────────
   const addToCart = useCallback((product: POSProduct) => {
+    // 🔒 Hard gate: no session = no sale (professional POS behaviour)
+    if (!session) {
+      setShowSession(true);
+      toast.error('Abra a caixa antes de adicionar produtos', { duration: 2500, icon: '🔒' });
+      return;
+    }
     setCart(prev => {
       const ex = prev.find(i => i.product_id === product.id);
       if (ex) return prev.map(i => i.product_id === product.id ? calcLine({ ...i, quantity: i.quantity + 1 }) : i);
       return [...prev, calcLine({ product_id: product.id, name: product.name, price: product.price, tax_rate: product.tax_rate, quantity: 1, discount_pct: 0, line_subtotal: 0, line_tax: 0, line_total: 0 })];
     });
-  }, []);
+  }, [session]);
 
   const changeQty = useCallback((id: string, qty: number) => {
     if (qty <= 0) { setCart(prev => prev.filter(i => i.product_id !== id)); return; }

@@ -85,14 +85,19 @@ export function validateSaftInput(input: SaftInput & {
     numbersSeen.add(inv.invoice_number);
 
     // AGT InvoiceNo format: TIPO SERIE/NNNNNN  (ex: FT A/1, FR 2025/0001, NC SRE/00042)
-    if (!/^(FT|FR|NC|ND|RC|PP|GT)\s+[A-Z0-9]+\/\d+$/.test(inv.invoice_number)) {
-      add('INV_NO_FMT', 'error',
-        `Número de fatura com formato inválido para AGT: "${inv.invoice_number}". Formato correcto: TIPO SÉRIE/NÚmero (ex: "FT A/1" ou "FR 2025/0001").`,
+    // Aceita: letras, números e hifens na série; barras obrigatórias.
+    if (!/^(FT|FR|NC|ND|RC|PP|GT|VD|TV|TD|AA|DA)\s+[A-Z0-9][A-Z0-9\-]*\/\d+$/.test(inv.invoice_number)) {
+      add('INV_NO_FMT', 'warning',
+        `Número de fatura com formato não padrão: "${inv.invoice_number}". Formato recomendado pela AGT: TIPO SÉRIE/NÚmero (ex: "FT A/1" ou "FR 2025/0001").`,
         { invoice: inv.invoice_number }
       );
     }
 
+    // client_nif: '000000000' é válido para Consumidor Final (POS)
     if (!inv.client_nif) add('INV_CLI', 'error', `Fatura ${inv.invoice_number} sem NIF de cliente.`, { invoice: inv.invoice_number });
+    else if (inv.client_nif !== '000000000' && inv.client_nif !== '999999999' && !/^\d{9,14}$/.test(inv.client_nif)) {
+      add('INV_CLI_FMT', 'warning', `Fatura ${inv.invoice_number}: NIF do cliente com formato inesperado: ${inv.client_nif}`);
+    }
     if (!inv.issued_at) add('INV_DATE', 'error', `Fatura ${inv.invoice_number} sem data de emissão.`);
 
     // Totals coherence — AGT: GrossTotal = NetTotal + TaxPayable
@@ -116,10 +121,12 @@ export function validateSaftInput(input: SaftInput & {
       if (Number(it.tax_rate) === 0 && !it.tax_exemption_reason && !inv.tax_exemption_reason) {
         add('TAX_EXEMPT', 'warning', `Fatura ${inv.invoice_number}: linha com IVA 0% sem motivo de isenção (M01-M19). Preencha o campo para atingir APTO_PARA_AUDITORIA.`);
       }
-      // Validate exemption code — M99 is NOT a valid AGT code
-      const exemCode = it.tax_exemption_reason ?? inv.tax_exemption_reason ?? '';
-      if (exemCode && !/^M(0[1-9]|1[0-9])$/.test(exemCode)) {
-        add('TAX_EXEMPT_CODE', 'error', `Fatura ${inv.invoice_number}: código de isenção "${exemCode}" inválido. Use M01-M19 conforme Portaria AGT.`);
+      // Validate exemption code — M99 is NOT a valid AGT code (maps to M19 in builder)
+      const exemCode = (it.tax_exemption_reason ?? inv.tax_exemption_reason ?? '').trim();
+      if (exemCode && exemCode === 'M99') {
+        add('TAX_EXEMPT_CODE', 'warning', `Fatura ${inv.invoice_number}: código M99 não reconhecido pela AGT. O sistema mapeou automaticamente para M19. Actualize o motivo para um código válido M01-M19.`);
+      } else if (exemCode && !/^M(0[1-9]|1[0-9])/.test(exemCode)) {
+        add('TAX_EXEMPT_CODE', 'warning', `Fatura ${inv.invoice_number}: código de isenção "${exemCode}" não segue formato Mxx. Use M01-M19.`);
       }
     }
 
