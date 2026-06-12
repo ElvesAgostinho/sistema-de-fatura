@@ -1,0 +1,42 @@
+version: "3"
+
+services:
+  faturaao:
+    type: app
+    data:
+      projectName: faturaao
+      serviceName: app
+      source:
+        type: github
+        owner: ElvesAgostinho
+        repo: sistema-de-fatura
+        ref: main
+        autoDeploy: true
+      build:
+        type: dockerfile
+        dockerfile: Dockerfile
+        buildArgs:
+          - name: NEXT_PUBLIC_SUPABASE_URL
+            value: https://eulbaaiumpizuprxtozq.supabase.co
+          - name: NEXT_PUBLIC_SUPABASE_ANON_KEY
+            value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV1bGJhYWl1bXBpenVwcnh0b3pxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5NDY0MTUsImV4cCI6MjA5MjUyMjQxNX0.2Mb_KWguUB-vYfAU5OzG4AF-j2qSbmKJz4eJ4J9vTYc
+      deploy:
+        replicas: 1
+        command: node server.js
+        zeroDowntime: true
+      env: |
+        NODE_ENV=production
+        NEXT_TELEMETRY_DISABLED=1
+        NEXT_PUBLIC_SUPABASE_URL=https://eulbaaiumpizuprxtozq.supabase.co
+        NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV1bGJhYWl1bXBpenVwcnh0b3pxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5NDY0MTUsImV4cCI6MjA5MjUyMjQxNX0.2Mb_KWguUB-vYfAU5OzG4AF-j2qSbmKJz4eJ4J9vTYc
+        SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV1bGJhYWl1bXBpenVwcnh0b3pxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3Njk0NjQxNSwiZXhwIjoyMDkyNTIyNDE1fQ.cJ-xNynOmpAFMzrIOmfUkPWKps2J_mqU1vVUhr-rvqg
+        NEXTAUTH_SECRET=faturaao-angola-secret-2026-xK9mP3nQ7rT
+        SUPER_ADMIN_EMAIL=elvessacapuri57@gmail.com
+      ports:
+        - published: 3000
+          target: 3000
+          protocol: tcp
+      domains:
+        - host: "$(PRIMARY_DOMAIN)"
+          port: 3000
+          https: true
