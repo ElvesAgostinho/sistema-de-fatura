@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient, createServerSupabaseClient } from '@/lib/supabase/server';
+import { sendPendingConfirmationEmail } from '@/lib/email';
 
 export const dynamic = 'force-dynamic';
 
@@ -80,6 +81,16 @@ export async function POST(req: Request) {
       user_id: user.id, company_id: company.id,
       action: 'signup.pending', entity: 'user', entity_id: user.id,
       details: { email, companyName: String(companyName).trim(), nif: cleanNif, fullName: fullName ?? null },
+    });
+
+    // 🔔 Send confirmation email to the user — fire and forget
+    sendPendingConfirmationEmail({
+      to: email,
+      fullName: fullName ? String(fullName).trim() : email,
+      companyName: String(companyName).trim(),
+      nif: cleanNif,
+    }).then(result => {
+      if (!result.ok) console.warn('[Signup Email] Failed:', result.error);
     });
 
     return NextResponse.json({ success: true, company, pending: true });
