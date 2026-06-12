@@ -7,9 +7,10 @@ import {
   CreditCard, Banknote, Smartphone, ChevronLeft, ChevronDown,
   Package, LogOut, RefreshCw, CheckCircle2, Loader2,
   Calculator, Tag, Clock, Receipt, Scan, Wifi, WifiOff,
-  Shield, AlertCircle, Percent, BarChart3,
+  Shield, AlertCircle, Percent, BarChart3, AlertTriangle, KeyRound,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useProfile } from '@/lib/hooks/use-profile';
 import type { POSProduct, POSCartItem, PaymentMethod, POSSession } from '@/lib/pos/types';
 import {
   printReceiptFallback, printToThermal, connectThermalPrinter,
@@ -630,6 +631,122 @@ function SuccessOverlay({ sale, onClose }: { sale: any; onClose: () => void }) {
   );
 }
 
+/* ─── VoidSaleModal — Anular Venda (como Lightspeed / NCR) ─────────────────── */
+function VoidSaleModal({
+  invoiceId, invoiceNumber, total, isCaixa, onClose, onVoided,
+}: {
+  invoiceId: string; invoiceNumber: string; total: number;
+  isCaixa: boolean; onClose: () => void; onVoided: () => void;
+}) {
+  const [reason,     setReason]     = useState('');
+  const [managerPin, setManagerPin] = useState('');
+  const [loading,    setLoading]    = useState(false);
+  const [needPin,    setNeedPin]    = useState(isCaixa);
+
+  const kzFmt = (n: number) =>
+    `${n.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Kz`;
+
+  const handleVoid = async () => {
+    if (reason.trim().length < 5) { toast.error('Escreva o motivo (mínimo 5 caracteres)'); return; }
+    if (needPin && !managerPin.trim()) { toast.error('Introduza o PIN do responsável'); return; }
+    setLoading(true);
+    try {
+      const r = await fetch('/api/pos/void-sale', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invoice_id: invoiceId, reason: reason.trim(), manager_pin: managerPin || undefined }),
+      });
+      const j = await r.json();
+      if (!r.ok) {
+        if (j?.requires_manager_pin) { setNeedPin(true); toast.error('PIN do responsável obrigatório'); }
+        else toast.error(j?.error ?? 'Erro ao anular venda');
+        return;
+      }
+      toast.success(`✓ Venda ${invoiceNumber} anulada`);
+      onVoided();
+    } catch { toast.error('Erro de conexão'); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center gap-3 px-6 py-5" style={{ background: '#fef2f2', borderBottom: '1px solid #fecaca' }}>
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: '#dc2626' }}>
+            <AlertTriangle className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h2 className="font-black text-base" style={{ color: '#991b1b' }}>Anular Venda</h2>
+            <p className="text-sm font-mono font-bold" style={{ color: '#dc2626' }}>{invoiceNumber} · {kzFmt(total)}</p>
+          </div>
+          <button onClick={onClose} className="ml-auto p-1.5 rounded-lg hover:bg-red-100 transition-colors">
+            <X className="w-4 h-4" style={{ color: '#dc2626' }} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="px-6 py-5 space-y-4">
+          <div className="rounded-xl p-3 text-sm" style={{ background: '#fff7ed', border: '1px solid #fed7aa', color: '#9a3412' }}>
+            <strong>Atenção:</strong> Esta acção é irreversível. A fatura fica <strong>ANULADA</strong>, o stock é reposto e fica registado em auditoria.
+          </div>
+
+          {/* Motivo */}
+          <div>
+            <label className="block text-sm font-semibold mb-1.5" style={{ color: '#374151' }}>Motivo da anulação *</label>
+            <textarea
+              value={reason} onChange={e => setReason(e.target.value)}
+              placeholder="Ex: Produto devolvido, erro de valor, cancelamento do cliente..."
+              rows={3}
+              className="w-full px-3 py-2 rounded-xl border text-sm focus:outline-none focus:ring-2 resize-none"
+              style={{ borderColor: reason.length > 4 ? '#21ab6b' : '#e5e7eb' }}
+            />
+            <p className="text-xs mt-1" style={{ color: reason.length > 4 ? '#21ab6b' : '#9ca3af' }}>
+              {reason.length} caracteres (mínimo 5)
+            </p>
+          </div>
+
+          {/* PIN do Gestor (caixa sempre precisa) */}
+          {needPin && (
+            <div>
+              <label className="block text-sm font-semibold mb-1.5" style={{ color: '#374151' }}>
+                <KeyRound className="w-3.5 h-3.5 inline mr-1" style={{ color: '#7c3aed' }} />
+                PIN do Responsável / Gestor *
+              </label>
+              <input
+                type="password" inputMode="numeric" maxLength={8}
+                value={managerPin} onChange={e => setManagerPin(e.target.value)}
+                placeholder="PIN do gestor ou administrador"
+                className="w-full h-11 px-4 rounded-xl border text-center text-xl font-mono tracking-widest focus:outline-none focus:ring-2"
+                style={{ borderColor: '#7c3aed40', background: '#f5f3ff' }}
+              />
+              <p className="text-xs mt-1.5" style={{ color: '#7c3aed' }}>
+                🔒 O gestor/administrador deve introduzir o seu PIN de autorização POS.
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 flex gap-3" style={{ borderTop: '1px solid #f3f4f6', background: '#f9fafb' }}>
+          <button onClick={onClose} disabled={loading} className="flex-1 py-3 rounded-xl border font-semibold text-sm hover:bg-gray-50" style={{ borderColor: '#e5e7eb', color: '#374151' }}>
+            Cancelar
+          </button>
+          <button
+            onClick={handleVoid}
+            disabled={loading || reason.trim().length < 5}
+            className="flex-1 py-3 rounded-xl font-black text-sm text-white flex items-center justify-center gap-2 disabled:opacity-40"
+            style={{ background: loading || reason.trim().length < 5 ? '#9ca3af' : '#dc2626' }}
+          >
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <AlertTriangle className="w-4 h-4" />}
+            {loading ? 'A anular...' : 'Confirmar Anulação'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Main POSView ─────────────────────────────────────────────────────────── */
 export default function POSView() {
   const router = useRouter();
@@ -644,6 +761,7 @@ export default function POSView() {
   const [showPayment, setShowPayment]     = useState(false);
   const [showSession, setShowSession]     = useState(false);
   const [showDiscount, setShowDiscount]   = useState<string | null>(null);
+  const [showVoid,    setShowVoid]        = useState(false);
   const [session, setSession]             = useState<POSSession | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('Dinheiro');
   const [lastSale, setLastSale]           = useState<any>(null);
@@ -651,6 +769,9 @@ export default function POSView() {
   const [companyInfo, setCompanyInfo]     = useState<any>(null);
   const [online, setOnline]               = useState(true);
   const [printerOk, setPrinterOk]         = useState(false);
+
+  const { profile } = useProfile();
+  const isCaixa = profile?.role === 'caixa';
 
   const searchRef = useRef<HTMLInputElement>(null);
   const scanStart = useRef<number>(0);
@@ -1126,7 +1247,7 @@ export default function POSView() {
             }
           </div>
 
-          {/* Shortcuts bar */}
+            {/* Shortcuts bar */}
           <div
             className="flex items-center gap-4 px-3 py-1.5 border-t text-[10px] shrink-0 overflow-x-auto scrollbar-none"
             style={{ background: XERO.card, borderColor: XERO.border, color: XERO.muted }}
@@ -1140,6 +1261,18 @@ export default function POSView() {
               </span>
             ))}
             <div className="flex-1" />
+            {/* Anular última venda */}
+            {lastSale?.invoice_id && (
+              <button
+                onClick={() => setShowVoid(true)}
+                className="flex items-center gap-1 font-semibold hover:underline transition-opacity"
+                style={{ color: XERO.danger }}
+                title="Anular última venda"
+              >
+                <X className="w-3 h-3" />
+                Anular venda
+              </button>
+            )}
             {lastSale && (
               <button
                 onClick={() => handlePrint(lastSale)}
@@ -1294,7 +1427,7 @@ export default function POSView() {
         <SessionModal
           onOpen={openSession}
           onClose={() => setShowSession(false)}
-          isCaixa={true}  // POS always requires session — no "enter without session" option
+          isCaixa={true}
         />
       )}
       {showDiscount && (
@@ -1306,6 +1439,18 @@ export default function POSView() {
         />
       )}
       {lastSale && <SuccessOverlay sale={lastSale} onClose={() => setLastSale(null)} />}
+
+      {/* ── MODAL ANULAR VENDA ─────────────────────────────────────────────── */}
+      {showVoid && lastSale?.invoice_id && (
+        <VoidSaleModal
+          invoiceId={lastSale.invoice_id}
+          invoiceNumber={lastSale.invoice_number}
+          total={lastSale.total ?? totals.total}
+          isCaixa={isCaixa}
+          onClose={() => setShowVoid(false)}
+          onVoided={() => { setShowVoid(false); setLastSale(null); }}
+        />
+      )}
     </div>
   );
 }

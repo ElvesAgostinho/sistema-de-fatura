@@ -117,9 +117,12 @@ export default function AppShell({ children, user, company, isPlatformAdmin, rol
   const isActive = (href?: string) => {
     if (!href) return false;
     if (optimisticHref) return href === optimisticHref;
-    if (href === '/dashboard' && pathname === '/dashboard') return true;
-    if (href !== '/dashboard' && pathname.startsWith(href)) return true;
-    return false;
+    // Exact match for routes that have sub-routes (avoids /invoices matching /invoices/new etc.)
+    const EXACT_ROUTES = ['/invoices', '/clients', '/products', '/purchases', '/suppliers', '/reports', '/recurring'];
+    if (EXACT_ROUTES.includes(href)) return pathname === href;
+    if (href === '/dashboard') return pathname === '/dashboard';
+    // For other routes (e.g. /invoices/new, /settings, /pos), use startsWith
+    return pathname.startsWith(href);
   };
 
   return (
