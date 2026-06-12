@@ -1,17 +1,28 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { FileText, Mail, Lock, Loader2, ArrowLeft } from 'lucide-react';
+import { FileText, Mail, Lock, Loader2, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { toast } from 'sonner';
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Show success toast when redirected from pending page after approval
+  useEffect(() => {
+    if (searchParams.get('approved') === '1') {
+      toast.success('Conta aprovada! Pode entrar agora.', {
+        icon: <CheckCircle2 className="text-green-500" />,
+        duration: 6000,
+      });
+    }
+  }, [searchParams]);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
