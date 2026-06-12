@@ -30,6 +30,20 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if ((ctx.profile as any).status === 'pending') redirect('/pending');
   if ((ctx.profile as any).status === 'rejected') redirect('/rejected');
 
+  // Gate: role 'caixa' — server-side route protection
+  // Caixas only access: /pos, /invoices, /products, /pos-close, /dashboard
+  const role = (ctx.profile as any).role as string | undefined;
+  if (role === 'caixa') {
+    const { headers } = await import('next/headers');
+    const headersList = headers();
+    const pathname = headersList.get('x-pathname') ?? headersList.get('x-invoke-path') ?? '';
+    const CAIXA_ALLOWED = ['/pos', '/invoices', '/products', '/pos-close', '/dashboard'];
+    const allowed = CAIXA_ALLOWED.some(p =>
+      pathname === p || pathname.startsWith(p + '/') || pathname.startsWith(p + '?')
+    );
+    if (pathname && !allowed) redirect('/pos');
+  }
+
   const safeCompany = ctx.company ? {
     id: ctx.company.id, name: ctx.company.name, nif: ctx.company.nif,
     email: ctx.company.email, logo_url: ctx.company.logo_url,
@@ -56,4 +70,3 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     </AppShell>
   );
 }
-

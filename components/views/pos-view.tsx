@@ -650,10 +650,20 @@ export default function POSView() {
     const sale = saleData ?? lastSale;
     if (!sale) { toast.error('Nenhuma venda para imprimir'); return; }
     const data: ReceiptData = {
-      companyName: companyInfo?.name ?? 'Empresa', companyNif: companyInfo?.nif ?? '',
-      companyAddress: companyInfo?.address ?? '', invoiceNumber: sale.invoice_number ?? '',
-      issuedAt: sale.issued_at ?? new Date().toISOString(),
-      items: (sale.items ?? cart).map((i: any) => ({ name: i.name, qty: i.quantity, price: i.price, total: i.line_total ?? i.total })),
+      companyName:    companyInfo?.name ?? 'Empresa',
+      companyNif:     companyInfo?.nif ?? '',
+      companyAddress: companyInfo?.address ?? '',
+      documentType:   'FR',
+      invoiceNumber:  sale.invoice_number ?? '',
+      issuedAt:       sale.issued_at ?? new Date().toISOString(),
+      cashierName:    sale.cashierName,  // Set at checkout time
+      terminalName:   session?.terminal_name,
+      hash:           sale.hash,
+      items: (sale.items ?? cart).map((i: any) => ({
+        name: i.name, qty: i.quantity, price: i.price,
+        total: i.line_total ?? i.total,
+        tax_rate: i.tax_rate,
+      })),
       subtotal: totals.subtotal, tax: totals.tax, total: totals.total,
       paymentMethod: sale.paymentMethod ?? paymentMethod,
       amountTendered: sale.amountTendered, change: sale.change,
@@ -684,9 +694,20 @@ export default function POSView() {
   };
 
   const closeSession = async () => {
-    if (!session || !confirm('Fechar sessão?')) return;
-    const r = await fetch('/api/pos/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'close', session_id: session.id }) });
-    if (r.ok) { setSession(null); toast.success('Sessão fechada'); router.push('/pos-close'); }
+    if (!session || !confirm('Fechar sessão? Será redirecionado para o Fecho de Caixa.')) return;
+    const r = await fetch('/api/pos/session', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'close', session_id: session.id }),
+    });
+    const j = await r.json();
+    if (r.ok) {
+      const sid = session.id;
+      setSession(null);
+      toast.success('Sessão fechada com sucesso');
+      router.push(`/pos-close?session_id=${sid}`);
+    } else {
+      toast.error(j.error ?? 'Erro ao fechar sessão');
+    }
   };
 
   // ── Checkout ──────────────────────────────────────────────────────────────
@@ -705,14 +726,26 @@ export default function POSView() {
       const meta = { ...sale, paymentMethod, amountTendered, change: j.change ?? 0, items: snap };
       setLastSale(meta); setCart([]); setShowPayment(false);
 
-      // Auto-print
+      // Auto-print with full AGT fields
       const data: ReceiptData = {
-        companyName: companyInfo?.name ?? 'Empresa', companyNif: companyInfo?.nif ?? '',
-        companyAddress: companyInfo?.address ?? '', invoiceNumber: sale.invoice_number,
-        issuedAt: sale.issued_at ?? new Date().toISOString(),
-        items: snap.map(i => ({ name: i.name, qty: i.quantity, price: i.price, total: i.line_total })),
-        subtotal: totals.subtotal, tax: totals.tax, total: totals.total, paymentMethod,
-        amountTendered: paymentMethod === 'Dinheiro' ? amountTendered : undefined, change: j.change,
+        companyName:    companyInfo?.name ?? 'Empresa',
+        companyNif:     companyInfo?.nif ?? '',
+        companyAddress: companyInfo?.address ?? '',
+        documentType:   'FR',
+        invoiceNumber:  sale.invoice_number,
+        issuedAt:       sale.issued_at ?? new Date().toISOString(),
+        cashierName:    meta.cashierName,
+        terminalName:   session?.terminal_name,
+        hash:           sale.hash,
+        items: snap.map(i => ({
+          name: i.name, qty: i.quantity, price: i.price,
+          total: i.line_total,
+          tax_rate: i.tax_rate,
+        })),
+        subtotal: totals.subtotal, tax: totals.tax, total: totals.total,
+        paymentMethod,
+        amountTendered: paymentMethod === 'Dinheiro' ? amountTendered : undefined,
+        change: j.change,
       };
       if (isThermalConnected()) printToThermal(data).then(res => { if (!res.ok) printReceiptFallback(data); });
       else printReceiptFallback(data);

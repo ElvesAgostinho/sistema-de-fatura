@@ -4,62 +4,159 @@ import { getCurrentUserContext } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+/**
+ * GET /api/pos-close?session_id=XXX
+ * Returns the complete closing report for a POS session.
+ * If session_id is provided, uses session data (precise).
+ * If not, falls back to today's date aggregation (legacy).
+ */
+export async function GET(req: Request) {
   const ctx = await getCurrentUserContext();
   if (!ctx?.profile) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   const admin = createAdminClient();
   const companyId = ctx.profile.company_id;
+  const { searchParams } = new URL(req.url);
+  const sessionId = searchParams.get('session_id');
 
-  const now = new Date();
-  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+  try {
+    let session: any = null;
+    let startTime: string;
+    let endTime: string;
 
-  // 1. Fetch Invoices from today
-  const { data: invoices } = await admin.from('invoices')
-    .select('id, total, status, document_type')
-    .eq('company_id', companyId)
-    .gte('issued_at', startOfDay);
+    if (sessionId) {
+      // Fetch session with opener info
+      const { data: sess } = await admin
+        .from('pos_sessions')
+        .select(`
+          id, terminal_name, status, opening_balance, closing_balance,
+          opened_at, closed_at, notes,
+          total_cash, total_multicaixa, total_tpa, total_credit, total_sales, sales_count,
+          opened_by, closed_by
+        `)
+        .eq('id', sessionId)
+        .eq('company_id', companyId)
+        .maybeSingle();
 
-  const issued = (invoices || []).filter(i => i.status === 'issued');
-  const cancelled = (invoices || []).filter(i => i.status === 'cancelled');
+      if (!sess) return NextResponse.json({ error: 'Sessão não encontrada' }, { status: 404 });
 
-  const totalInvoiced = issued.reduce((sum, inv) => sum + Number(inv.total || 0), 0);
+      // Get opener email
+      let openedByEmail = '';
+      if (sess.opened_by) {
+        const { data: opener } = await admin
+          .from('users')
+          .select('email')
+          .eq('id', sess.opened_by)
+          .maybeSingle();
+        openedByEmail = opener?.email ?? '';
+      }
 
-  // 2. Fetch Payments from today
-  const { data: payments } = await admin.from('payments')
-    .select('id, amount, method, payment_date')
-    .eq('company_id', companyId)
-    .gte('payment_date', startOfDay);
-
-  const paymentTotals = {
-    Dinheiro: 0,
-    Multicaixa: 0,
-    Transferência: 0,
-    Cheque: 0,
-    Outro: 0,
-  };
-
-  let totalReceived = 0;
-  (payments || []).forEach(p => {
-    const amt = Number(p.amount || 0);
-    totalReceived += amt;
-    const method = p.method as keyof typeof paymentTotals;
-    if (paymentTotals[method] !== undefined) {
-      paymentTotals[method] += amt;
+      session = { ...sess, opened_by_email: openedByEmail };
+      startTime = sess.opened_at;
+      endTime = sess.closed_at ?? new Date().toISOString();
     } else {
-      paymentTotals['Outro'] += amt;
+      // Legacy: today's date
+      const now = new Date();
+      startTime = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+      endTime = now.toISOString();
     }
-  });
 
-  return NextResponse.json({
-    date: startOfDay,
-    invoices: {
-      total_issued: issued.length,
-      total_cancelled: cancelled.length,
-      total_amount: totalInvoiced,
-    },
-    payments: {
-      total_received: totalReceived,
-      breakdown: paymentTotals
-    }
-  });
+    // Fetch invoices in the session time window
+    let invoiceQuery = admin
+      .from('invoices')
+      .select('id, total, subtotal, tax, status, document_type, payment_status')
+      .eq('company_id', companyId)
+      .gte('issued_at', startTime);
+    if (endTime) invoiceQuery = invoiceQuery.lte('issued_at', endTime);
+
+    const { data: invoices } = await invoiceQuery;
+
+    const issued    = (invoices || []).filter(i => i.status !== 'cancelled');
+    const cancelled = (invoices || []).filter(i => i.status === 'cancelled');
+
+    const totalInvoiced = issued.reduce((s, i) => s + Number(i.total || 0), 0);
+    const taxTotal      = issued.reduce((s, i) => s + Number(i.tax || 0), 0);
+    const subtotalSum   = issued.reduce((s, i) => s + Number(i.subtotal || 0), 0);
+
+    // Fetch payments in window
+    let payQuery = admin
+      .from('payments')
+      .select('id, amount, method')
+      .eq('company_id', companyId)
+      .gte('payment_date', startTime);
+    if (endTime) payQuery = payQuery.lte('payment_date', endTime);
+
+    const { data: payments } = await payQuery;
+
+    const breakdown: Record<string, number> = {
+      Dinheiro: 0, Multicaixa: 0, Transferência: 0, Cheque: 0,
+      TPA: 0, Crédito: 0, Misto: 0, Outro: 0,
+    };
+    let totalReceived = 0;
+    (payments || []).forEach(p => {
+      const amt = Number(p.amount || 0);
+      totalReceived += amt;
+      const method = p.method as string;
+      if (method in breakdown) breakdown[method] += amt;
+      else breakdown['Outro'] += amt;
+    });
+
+    // If session has stored totals (from increment_pos_session RPC), prefer those
+    const sessionTotals = session ? {
+      total_cash:       Number(session.total_cash ?? 0),
+      total_multicaixa: Number(session.total_multicaixa ?? 0),
+      total_tpa:        Number(session.total_tpa ?? 0),
+      total_credit:     Number(session.total_credit ?? 0),
+      total_sales:      Number(session.total_sales ?? 0),
+      sales_count:      Number(session.sales_count ?? issued.length),
+    } : {
+      total_cash:       breakdown['Dinheiro'],
+      total_multicaixa: breakdown['Multicaixa'],
+      total_tpa:        breakdown['TPA'],
+      total_credit:     breakdown['Crédito'],
+      total_sales:      totalInvoiced,
+      sales_count:      issued.length,
+    };
+
+    const openingBalance  = Number(session?.opening_balance ?? 0);
+    const closingBalance  = Number(session?.closing_balance ?? 0);
+    const expectedInCash  = openingBalance + sessionTotals.total_cash;
+    const difference      = closingBalance - expectedInCash;
+
+    // Next Z-Report number for this company
+    const { data: lastZ } = await admin
+      .from('pos_z_reports')
+      .select('z_number')
+      .eq('company_id', companyId)
+      .order('z_number', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const nextZNumber = (lastZ?.z_number ?? 0) + 1;
+
+    return NextResponse.json({
+      session: session ?? null,
+      next_z_number: nextZNumber,
+      period: { from: startTime, to: endTime },
+      invoices: {
+        total_issued:    issued.length,
+        total_cancelled: cancelled.length,
+        total_amount:    totalInvoiced,
+        subtotal:        subtotalSum,
+        tax_total:       taxTotal,
+      },
+      payments: {
+        total_received: totalReceived,
+        breakdown,
+      },
+      session_totals:   sessionTotals,
+      reconciliation: {
+        opening_balance:  openingBalance,
+        closing_balance:  closingBalance,
+        expected_in_cash: expectedInCash,
+        difference,
+      },
+    });
+  } catch (err: any) {
+    return NextResponse.json({ error: err?.message ?? 'Erro interno' }, { status: 500 });
+  }
 }
