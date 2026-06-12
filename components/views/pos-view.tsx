@@ -1290,7 +1290,13 @@ export default function POSView() {
           processing={processing}
         />
       )}
-      {showSession && <SessionModal onOpen={openSession} onClose={() => setShowSession(false)} />}
+      {showSession && (
+        <SessionModal
+          onOpen={openSession}
+          onClose={() => setShowSession(false)}
+          isCaixa={true}  // POS always requires session — no "enter without session" option
+        />
+      )}
       {showDiscount && (
         <DiscountModal
           productId={showDiscount}
