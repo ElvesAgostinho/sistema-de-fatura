@@ -76,9 +76,10 @@ export default async function PosReceiptPrintPage({ params }: { params: { id: st
           fontSize: '11px',
           lineHeight: '1.4',
           padding: '4mm',
+          boxSizing: 'border-box',
           boxShadow: '0 2px 12px rgba(0,0,0,0.15)',
         }}
-        className="print:shadow-none print:m-0"
+        className="print:shadow-none print:m-0 print:p-1"
       >
         {/* Cabeçalho empresa */}
         <div style={{ textAlign: 'center', marginBottom: '8px' }}>

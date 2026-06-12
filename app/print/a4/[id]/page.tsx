@@ -97,7 +97,6 @@ export default async function A4PrintPage({ params }: { params: { id: string } }
 <style>
   *{box-sizing:border-box;margin:0;padding:0;}
   body{font-family:'Segoe UI','Helvetica Neue',Helvetica,Arial,sans-serif;color:#111827;background:#fff;font-size:11.5px;line-height:1.5;}
-  @page{size:A4;margin:18mm 18mm 16mm 18mm;}
   .no-break{page-break-inside:avoid;break-inside:avoid;}
   table{border-collapse:collapse;width:100%;}
   .totals-grand{display:flex;justify-content:space-between;padding:12px 14px;background:${primaryColor};}
@@ -221,14 +220,20 @@ ${cancelled ? `<div class="no-break" style="background:#fee2e2;border-left:3px s
     >
       <div
         dangerouslySetInnerHTML={{ __html: html }}
-        style={{ background: 'white', width: '210mm', minHeight: '297mm', boxShadow: '0 4px 24px rgba(0,0,0,0.12)' }}
-        className="print:shadow-none print:w-full print:min-h-0"
+        style={{ 
+          background: 'white', 
+          width: '210mm', 
+          minHeight: '297mm',
+          padding: '18mm', 
+          boxSizing: 'border-box',
+          boxShadow: '0 4px 24px rgba(0,0,0,0.12)' 
+        }}
+        className="print:shadow-none print:w-full print:min-h-0 print:m-0"
       />
       <style dangerouslySetInnerHTML={{ __html: `
         @media print {
           @page { size: A4; margin: 0; }
-          body { background: white !important; }
-          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+          body { background: white !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
         }
       ` }} />
       <script dangerouslySetInnerHTML={{ __html: `window.onload = function(){ setTimeout(function(){ window.print(); }, 600); }` }} />
