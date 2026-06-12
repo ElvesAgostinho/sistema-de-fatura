@@ -84,16 +84,25 @@ export function validateSaftInput(input: SaftInput & {
     if (numbersSeen.has(inv.invoice_number)) add('INV_DUP', 'error', `Número de fatura duplicado: ${inv.invoice_number}`);
     numbersSeen.add(inv.invoice_number);
 
+    // AGT InvoiceNo format: TIPO SERIE/NNNNNN  (ex: FT A/1, FR 2025/0001, NC SRE/00042)
+    if (!/^(FT|FR|NC|ND|RC|PP|GT)\s+[A-Z0-9]+\/\d+$/.test(inv.invoice_number)) {
+      add('INV_NO_FMT', 'error',
+        `Número de fatura com formato inválido para AGT: "${inv.invoice_number}". Formato correcto: TIPO SÉRIE/NÚmero (ex: "FT A/1" ou "FR 2025/0001").`,
+        { invoice: inv.invoice_number }
+      );
+    }
+
     if (!inv.client_nif) add('INV_CLI', 'error', `Fatura ${inv.invoice_number} sem NIF de cliente.`, { invoice: inv.invoice_number });
     if (!inv.issued_at) add('INV_DATE', 'error', `Fatura ${inv.invoice_number} sem data de emissão.`);
 
-    // Totals coherence
+    // Totals coherence — AGT: GrossTotal = NetTotal + TaxPayable
     const sub = Number(inv.subtotal);
     const tax = Number(inv.tax);
     const tot = Number(inv.total);
     if (Number.isFinite(sub) && Number.isFinite(tax) && Number.isFinite(tot)) {
-      if (Math.abs((sub + tax) - tot) > 0.02) {
-        add('INV_TOTALS', 'error', `Fatura ${inv.invoice_number}: subtotal (${sub.toFixed(2)}) + IVA (${tax.toFixed(2)}) ≠ total (${tot.toFixed(2)}).`);
+      const computed = +(sub + tax).toFixed(2);
+      if (Math.abs(computed - tot) > 0.02) {
+        add('INV_TOTALS', 'error', `Fatura ${inv.invoice_number}: GrossTotal (${tot.toFixed(2)}) ≠ NetTotal (${sub.toFixed(2)}) + TaxPayable (${tax.toFixed(2)}) = ${computed.toFixed(2)}. AGT rejeita SAF-T com esta diferença.`);
       }
     }
     // Items vs totals
@@ -105,7 +114,12 @@ export function validateSaftInput(input: SaftInput & {
     // Exemption reason when rate=0
     for (const it of inv.items || []) {
       if (Number(it.tax_rate) === 0 && !it.tax_exemption_reason && !inv.tax_exemption_reason) {
-        add('TAX_EXEMPT', 'warning', `Fatura ${inv.invoice_number}: linha com IVA 0% sem motivo de isenção — será usado "M99".`);
+        add('TAX_EXEMPT', 'warning', `Fatura ${inv.invoice_number}: linha com IVA 0% sem motivo de isenção (M01-M19). Preencha o campo para atingir APTO_PARA_AUDITORIA.`);
+      }
+      // Validate exemption code — M99 is NOT a valid AGT code
+      const exemCode = it.tax_exemption_reason ?? inv.tax_exemption_reason ?? '';
+      if (exemCode && !/^M(0[1-9]|1[0-9])$/.test(exemCode)) {
+        add('TAX_EXEMPT_CODE', 'error', `Fatura ${inv.invoice_number}: código de isenção "${exemCode}" inválido. Use M01-M19 conforme Portaria AGT.`);
       }
     }
 

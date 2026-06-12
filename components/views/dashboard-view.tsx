@@ -32,7 +32,7 @@ export default function DashboardView() {
           <p className="text-sm text-slate-500">Visão geral do negócio</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={reload} disabled={loading || validating} title="Atualizar dados" className="inline-flex items-center justify-center w-9 h-9 rounded bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50">
+          <button onClick={reload} disabled={loading || validating} title="Atualizar dados" className="inline-flex items-center justify-center w-11 h-11 rounded bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50 active:scale-95">
             <RefreshCw className={cn("w-4 h-4", validating && "animate-spin")} />
           </button>
         </div>
@@ -135,7 +135,7 @@ export default function DashboardView() {
               {firstLoad ? (
                 <div className="py-12 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-slate-300" /></div>
               ) : (stats?.monthlyChart && stats.monthlyChart.length > 0) ? (
-                <div className="h-64 w-full">
+                <div className="h-48 sm:h-64 w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={stats.monthlyChart} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />

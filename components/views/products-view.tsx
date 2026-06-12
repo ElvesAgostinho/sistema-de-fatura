@@ -15,6 +15,7 @@ type Product = {
   id: string; name: string; description?: string | null;
   price: number; tax_rate: number;
   sku?: string | null;
+  product_type?: string | null;  // P=Produto, S=Serviço, O=Outro, E=Encargos, I=Imobilizado
   track_stock?: boolean;
   quantity_in_stock?: number;
   stock_alert_threshold?: number;
@@ -30,6 +31,7 @@ export default function ProductsView() {
   const [search, setSearch] = useState('');
   const [taxFilter, setTaxFilter] = useState<string>('');
   const [stockFilter, setStockFilter] = useState<string>('');
+  const [typeFilter, setTypeFilter] = useState<string>('');
 
   const { data, loading, validating, reload, mutate, error } = useResource<{ products: Product[] }>('/api/products', {
     ttl: 60_000,
@@ -47,6 +49,7 @@ export default function ProductsView() {
         if (!hay.includes(s)) return false;
       }
       if (taxFilter !== '' && Number(p.tax_rate) !== Number(taxFilter)) return false;
+      if (typeFilter !== '' && (p.product_type ?? 'S') !== typeFilter) return false;
       if (stockFilter === 'low') {
         if (!p.track_stock) return false;
         if (Number(p.quantity_in_stock ?? 0) > Number(p.stock_alert_threshold ?? 0)) return false;
@@ -56,8 +59,8 @@ export default function ProductsView() {
     });
   }, [all, search, taxFilter, stockFilter]);
 
-  const hasFilters = Boolean(search || taxFilter || stockFilter);
-  const clearFilters = () => { setSearch(''); setTaxFilter(''); setStockFilter(''); };
+  const hasFilters = Boolean(search || taxFilter || stockFilter || typeFilter);
+  const clearFilters = () => { setSearch(''); setTaxFilter(''); setStockFilter(''); setTypeFilter(''); };
 
   const lowStockCount = all.filter((p) => p.track_stock && Number(p.quantity_in_stock ?? 0) <= Number(p.stock_alert_threshold ?? 0)).length;
 
@@ -90,6 +93,7 @@ export default function ProductsView() {
   const exportCols = useMemo(() => ([
     { header: 'Nome', accessor: (p: Product) => p.name },
     { header: 'SKU', accessor: (p: Product) => p.sku ?? '' },
+    { header: 'Tipo', accessor: (p: Product) => p.product_type ?? 'S' },
     { header: 'Descrição', accessor: (p: Product) => p.description ?? '' },
     { header: 'Preço', accessor: (p: Product) => p.price },
     { header: 'IVA %', accessor: (p: Product) => p.tax_rate },
@@ -148,6 +152,18 @@ export default function ProductsView() {
         </div>
         <div className="relative">
           <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}
+            className="h-10 pl-10 pr-8 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+            <option value="">Todos os tipos</option>
+            <option value="P">📦 Produto físico</option>
+            <option value="S">🔧 Serviço</option>
+            <option value="O">📋 Outro</option>
+            <option value="E">💼 Encargos</option>
+            <option value="I">🏗️ Imobilizado</option>
+          </select>
+        </div>
+        <div className="relative">
+          <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
           <select value={stockFilter} onChange={(e) => setStockFilter(e.target.value)}
             className="h-10 pl-10 pr-8 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary">
             <option value="">Todo stock</option>
@@ -194,10 +210,11 @@ export default function ProductsView() {
                 <thead className="bg-muted/50 sticky top-0 backdrop-blur-sm z-10 border-b">
                   <tr className="text-left font-medium text-muted-foreground">
                     <th className="py-2.5 px-3">Nome</th>
-                    <th className="py-2.5 px-3">SKU</th>
+                    <th className="py-2.5 px-3 hidden sm:table-cell">SKU</th>
+                    <th className="py-2.5 px-3">Tipo <span className="text-[9px] text-primary font-normal">(SAF-T)</span></th>
                     <th className="py-2.5 px-3 text-right">Preço</th>
-                    <th className="py-2.5 px-3 text-right">IVA</th>
-                    <th className="py-2.5 px-3 text-right">Stock</th>
+                    <th className="py-2.5 px-3 text-right hidden sm:table-cell">IVA</th>
+                    <th className="py-2.5 px-3 text-right hidden md:table-cell">Stock</th>
                     <th className="py-2.5 px-3 text-right">Ações</th>
                   </tr>
                 </thead>
@@ -210,10 +227,23 @@ export default function ProductsView() {
                           <div className="font-medium text-foreground">{p.name}</div>
                           {p.description && <div className="text-[11px] text-muted-foreground truncate max-w-[200px]">{p.description}</div>}
                         </td>
-                        <td className="py-2 px-3 font-mono text-[11px] text-muted-foreground">{p.sku ?? '-'}</td>
+                        <td className="py-2 px-3 font-mono text-[11px] text-muted-foreground hidden sm:table-cell">{p.sku ?? '-'}</td>
+                        <td className="py-2 px-3">
+                          {(() => {
+                            const types: Record<string, { label: string; color: string }> = {
+                              P: { label: 'Produto', color: 'bg-sky-50 text-sky-700' },
+                              S: { label: 'Serviço', color: 'bg-purple-50 text-purple-700' },
+                              O: { label: 'Outro',   color: 'bg-slate-100 text-slate-600' },
+                              E: { label: 'Encargos',color: 'bg-amber-50 text-amber-700' },
+                              I: { label: 'Imobil.', color: 'bg-green-50 text-green-700' },
+                            };
+                            const t = types[p.product_type ?? 'S'] ?? types['S'];
+                            return <span className={`inline-flex text-[10px] font-bold px-1.5 py-0.5 rounded ${t.color}`}>{t.label}</span>;
+                          })()}
+                        </td>
                         <td className="py-2 px-3 text-right font-mono font-semibold">{formatAOA(p.price)}</td>
-                        <td className="py-2 px-3 text-right font-mono text-[11px]">{Number(p.tax_rate).toFixed(2)}%</td>
-                        <td className="py-2 px-3 text-right">
+                        <td className="py-2 px-3 text-right font-mono text-[11px] hidden sm:table-cell">{Number(p.tax_rate).toFixed(2)}%</td>
+                        <td className="py-2 px-3 text-right hidden md:table-cell">
                           {p.track_stock ? (
                             <span className={`inline-flex items-center gap-1 text-[11px] font-mono font-bold px-1.5 py-0.5 rounded ${lowStock ? 'bg-warning/10 text-warning' : 'bg-success/10 text-success'}`}>
                               {lowStock && <AlertTriangle className="w-3 h-3" />}

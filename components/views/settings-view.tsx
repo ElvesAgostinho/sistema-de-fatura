@@ -20,13 +20,25 @@ export default function SettingsView() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [company, setCompany] = useState<any>({ name: '', nif: '', address: '', phone: '', email: '', logo_url: '' });
+  const [company, setCompany] = useState<any>({
+    name: '', nif: '', address: '', phone: '', email: '', logo_url: '',
+    business_name: '', city: 'Luanda', postal_code: '',
+  });
 
   useEffect(() => { (async () => {
     try {
       const r = await fetch('/api/company', { cache: 'no-store' });
       const j = await r.json();
-      if (r.ok && j.company) setCompany({ ...j.company, address: j.company.address ?? '', phone: j.company.phone ?? '', email: j.company.email ?? '', logo_url: j.company.logo_url ?? '' });
+      if (r.ok && j.company) setCompany({
+        ...j.company,
+        address:       j.company.address       ?? '',
+        phone:         j.company.phone         ?? '',
+        email:         j.company.email         ?? '',
+        logo_url:      j.company.logo_url      ?? '',
+        business_name: j.company.business_name ?? '',
+        city:          j.company.city          ?? 'Luanda',
+        postal_code:   j.company.postal_code   ?? '',
+      });
     } finally { setLoading(false); }
   })(); }, []);
 
@@ -126,16 +138,22 @@ export default function SettingsView() {
       <div className="ms-card p-6 space-y-4">
         <h3 className="font-semibold flex items-center gap-2"><Building2 className="w-4 h-4 text-primary" />Dados da empresa</h3>
         <div className="grid md:grid-cols-2 gap-4">
-          <div className="md:col-span-2"><label className="text-xs text-muted-foreground mb-1 block">Nome da empresa *</label>
+          <div className="md:col-span-2"><label className="text-xs text-muted-foreground mb-1 block">Nome comercial (para faturas) *</label>
             <input value={company.name ?? ''} onChange={(e) => setCompany((p: any) => ({ ...p, name: e.target.value }))} className="w-full h-10 px-3 rounded border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary" /></div>
+          <div className="md:col-span-2"><label className="text-xs text-muted-foreground mb-1 block">Razão social / Denominação legal <span className="text-[10px] text-primary">(SAF-T: BusinessName)</span></label>
+            <input value={company.business_name ?? ''} onChange={(e) => setCompany((p: any) => ({ ...p, business_name: e.target.value }))} placeholder="Ex: EMPRESA XYZ, LDA" className="w-full h-10 px-3 rounded border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary" /></div>
           <div><label className="text-xs text-muted-foreground mb-1 block">NIF *</label>
             <input value={company.nif ?? ''} disabled className="w-full h-10 px-3 rounded border border-input bg-secondary text-sm font-mono opacity-70" />
             <p className="text-xs text-muted-foreground mt-1">NIF não pode ser alterado após criar a empresa.</p>
           </div>
           <div><label className="text-xs text-muted-foreground mb-1 block">Telefone</label>
             <input value={company.phone ?? ''} onChange={(e) => setCompany((p: any) => ({ ...p, phone: e.target.value }))} className="w-full h-10 px-3 rounded border border-input bg-background text-sm" /></div>
-          <div className="md:col-span-2"><label className="text-xs text-muted-foreground mb-1 block">Endereço</label>
+          <div className="md:col-span-2"><label className="text-xs text-muted-foreground mb-1 block">Endereço / Rua</label>
             <input value={company.address ?? ''} onChange={(e) => setCompany((p: any) => ({ ...p, address: e.target.value }))} className="w-full h-10 px-3 rounded border border-input bg-background text-sm" /></div>
+          <div><label className="text-xs text-muted-foreground mb-1 block">Cidade <span className="text-[10px] text-primary">(SAF-T)</span></label>
+            <input value={company.city ?? ''} onChange={(e) => setCompany((p: any) => ({ ...p, city: e.target.value }))} placeholder="Luanda" className="w-full h-10 px-3 rounded border border-input bg-background text-sm" /></div>
+          <div><label className="text-xs text-muted-foreground mb-1 block">Código postal <span className="text-[10px] text-primary">(SAF-T)</span></label>
+            <input value={company.postal_code ?? ''} onChange={(e) => setCompany((p: any) => ({ ...p, postal_code: e.target.value }))} placeholder="Ex: 1000-001" className="w-full h-10 px-3 rounded border border-input bg-background text-sm" /></div>
           <div className="md:col-span-2"><label className="text-xs text-muted-foreground mb-1 block">Email</label>
             <input type="email" value={company.email ?? ''} onChange={(e) => setCompany((p: any) => ({ ...p, email: e.target.value }))} className="w-full h-10 px-3 rounded border border-input bg-background text-sm" /></div>
         </div>
