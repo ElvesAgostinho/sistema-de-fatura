@@ -4,139 +4,193 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Search, ShoppingCart, Trash2, Plus, Minus, X, Printer,
-  CreditCard, Banknote, Smartphone, ChevronLeft, ChevronRight,
-  Package, BarChart3, Zap, User, LogOut, Settings, RefreshCw,
-  CheckCircle2, AlertCircle, Loader2, Calculator, Tag, Clock,
-  Wifi, WifiOff, Receipt, PlusCircle
+  CreditCard, Banknote, Smartphone, ChevronLeft, ChevronDown,
+  Package, LogOut, RefreshCw, CheckCircle2, Loader2,
+  Calculator, Tag, Clock, Receipt, Scan, Wifi, WifiOff,
+  Shield, AlertCircle, Percent, BarChart3,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { POSProduct, POSCartItem, PaymentMethod, POSSession } from '@/lib/pos/types';
-import { printReceiptFallback } from '@/lib/pos/thermal-printer';
+import {
+  printReceiptFallback, printToThermal, connectThermalPrinter,
+  isThermalConnected, type ReceiptData,
+} from '@/lib/pos/thermal-printer';
 
-// ── Helpers ─────────────────────────────────────────────────────────────────
-const kz = (n: number) => `${n.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Kz`;
+/* ─── Design Tokens (Xero Palette) ────────────────────────────────────────── */
+const XERO = {
+  navy:    '#0b4a6f',   // sidebar / topbar
+  navyDk:  '#093c5a',   // hover on navy
+  cyan:    '#13b5ea',   // primary action
+  cyanDk:  '#0e9fd4',
+  bg:      '#F4F5F8',   // app background
+  card:    '#ffffff',   // card background
+  border:  '#e2e4e9',
+  text:    '#202f3f',   // foreground
+  muted:   '#627284',   // secondary text
+  success: '#21ab6b',
+  warning: '#f9a806',
+  danger:  '#e6193c',
+};
+
+/* ─── Helpers ──────────────────────────────────────────────────────────────── */
+const kz = (n: number) =>
+  `${n.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Kz`;
 
 function calcLine(item: POSCartItem): POSCartItem {
-  const disc = item.discount_pct / 100;
-  const effectivePrice = item.price * (1 - disc);
-  const sub  = +(effectivePrice * item.quantity).toFixed(2);
-  const tax  = +(sub * (item.tax_rate / 100)).toFixed(2);
+  const eff = item.price * (1 - item.discount_pct / 100);
+  const sub = +(eff * item.quantity).toFixed(2);
+  const tax = +(sub * (item.tax_rate / 100)).toFixed(2);
   return { ...item, line_subtotal: sub, line_tax: tax, line_total: +(sub + tax).toFixed(2) };
 }
 
-const PAYMENT_ICONS: Record<PaymentMethod, React.ReactNode> = {
-  'Dinheiro':   <Banknote className="w-5 h-5" />,
-  'Multicaixa': <CreditCard className="w-5 h-5" />,
-  'TPA':        <Smartphone className="w-5 h-5" />,
-  'Crédito':    <Tag className="w-5 h-5" />,
-  'Misto':      <Calculator className="w-5 h-5" />,
+const CAT_EMOJI: Record<string, string> = {
+  'Alimentação':'🥦','Bebidas':'🍺','Higiene':'🧴','Limpeza':'🧹',
+  'Mercearia':'🥫','Frios':'❄️','Padaria':'🍞','Talho':'🥩',
+  'Peixaria':'🐟','Frutas':'🍎','Electrónica':'📱','Vestuário':'👕',
+  'Bebidas Alcoólicas':'🍷','Laticínios':'🥛','Confeitaria':'🍫',
 };
 
-const CATEGORIES_EMOJI: Record<string, string> = {
-  'Alimentação': '🥦', 'Bebidas': '🍺', 'Higiene': '🧴', 'Limpeza': '🧹',
-  'Mercearia': '🥫', 'Frios': '❄️', 'Padaria': '🍞', 'Talho': '🥩',
-  'Peixaria': '🐟', 'Frutas': '🍎', 'Electrónica': '📱', 'Vestuário': '👕',
+const PAY_ICONS: Record<PaymentMethod, React.ReactNode> = {
+  'Dinheiro':   <Banknote className="w-4 h-4" />,
+  'Multicaixa': <CreditCard className="w-4 h-4" />,
+  'TPA':        <Smartphone className="w-4 h-4" />,
+  'Crédito':    <Tag className="w-4 h-4" />,
+  'Misto':      <Calculator className="w-4 h-4" />,
 };
 
-// ── Sub-components ───────────────────────────────────────────────────────────
-
+/* ─── ProductCard ──────────────────────────────────────────────────────────── */
 function ProductCard({ product, onAdd }: { product: POSProduct; onAdd: (p: POSProduct) => void }) {
-  const lowStock = product.track_stock && (product.quantity_in_stock ?? 0) < 5;
-  const outOfStock = product.track_stock && (product.quantity_in_stock ?? 0) <= 0;
+  const qty = product.quantity_in_stock ?? Infinity;
+  const lowStock   = product.track_stock && qty < 5 && qty > 0;
+  const outOfStock = product.track_stock && qty <= 0;
 
   return (
     <button
       onClick={() => !outOfStock && onAdd(product)}
       disabled={outOfStock}
+      style={{ background: XERO.card, borderColor: outOfStock ? XERO.border : XERO.border }}
       className={`
-        relative flex flex-col items-center justify-center p-3 rounded-xl border-2 text-center
-        transition-all duration-150 select-none group
+        relative flex flex-col items-center p-2.5 rounded-lg border text-center
+        transition-all duration-150 select-none group min-h-[100px]
         ${outOfStock
-          ? 'opacity-40 cursor-not-allowed border-white/5 bg-white/3'
-          : 'cursor-pointer hover:scale-105 hover:shadow-lg active:scale-95 border-white/10 bg-white/5 hover:border-sky-500/60 hover:bg-sky-500/10'
+          ? 'opacity-40 cursor-not-allowed'
+          : 'cursor-pointer hover:border-[#13b5ea] hover:shadow-md active:scale-95 active:shadow-sm'
         }
       `}
     >
-      {/* Category emoji / image */}
-      <div className="text-2xl mb-1.5">
+      <div className="text-2xl mb-1 leading-none">
         {product.image_url
-          ? <img src={product.image_url} alt="" className="w-10 h-10 object-cover rounded-lg" />
-          : CATEGORIES_EMOJI[product.category ?? ''] ?? '📦'}
+          ? <img src={product.image_url} alt="" className="w-9 h-9 object-cover rounded-md" />
+          : (CAT_EMOJI[product.category ?? ''] ?? '📦')}
       </div>
+      <p className="text-[11px] font-semibold leading-tight text-slate-700 line-clamp-2 w-full mb-1">
+        {product.name}
+      </p>
+      <p className="text-[12px] font-bold tabular-nums" style={{ color: XERO.cyan }}>
+        {kz(product.price)}
+      </p>
 
-      <p className="text-xs font-medium leading-tight text-white/90 line-clamp-2 mb-1">{product.name}</p>
-      <p className="text-sm font-bold text-sky-400">{kz(product.price)}</p>
-
-      {lowStock && !outOfStock && (
-        <span className="absolute top-1.5 right-1.5 bg-amber-500/80 text-amber-900 text-[9px] font-bold px-1 rounded">
-          {product.quantity_in_stock}
+      {lowStock && (
+        <span
+          className="absolute top-1 right-1 text-[9px] font-black px-1.5 py-0.5 rounded-full"
+          style={{ background: XERO.warning + '20', color: XERO.warning }}
+        >
+          {qty}
         </span>
       )}
       {outOfStock && (
-        <span className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/40 text-red-400 text-xs font-bold">
+        <span className="absolute inset-0 rounded-lg flex items-center justify-center bg-white/80 text-red-500 text-xs font-bold">
           Esgotado
         </span>
+      )}
+
+      {/* Hover overlay */}
+      {!outOfStock && (
+        <div
+          className="absolute inset-0 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+          style={{ background: XERO.cyan + '12' }}
+        >
+          <Plus className="w-6 h-6" style={{ color: XERO.cyan }} />
+        </div>
       )}
     </button>
   );
 }
 
-function CartItemRow({
-  item, onQtyChange, onRemove, onDiscount,
-}: {
+/* ─── CartItemRow ──────────────────────────────────────────────────────────── */
+function CartItemRow({ item, onQtyChange, onRemove, onDiscount }: {
   item: POSCartItem;
   onQtyChange: (id: string, qty: number) => void;
   onRemove: (id: string) => void;
   onDiscount: (id: string) => void;
 }) {
   return (
-    <div className="flex items-center gap-2 py-2 px-3 rounded-lg bg-white/5 group hover:bg-white/8 transition-colors">
+    <div
+      className="flex items-center gap-2 py-2 px-3 rounded-lg border group transition-all hover:shadow-sm"
+      style={{ background: XERO.card, borderColor: XERO.border }}
+    >
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-white/90 truncate">{item.name}</p>
-        <p className="text-xs text-white/50">
+        <p className="text-xs font-semibold truncate" style={{ color: XERO.text }}>{item.name}</p>
+        <p className="text-[10px] mt-0.5" style={{ color: XERO.muted }}>
           {kz(item.price)}
-          {item.discount_pct > 0 && <span className="ml-1 text-amber-400">-{item.discount_pct}%</span>}
+          {item.discount_pct > 0 && (
+            <span className="ml-1 font-bold" style={{ color: XERO.warning }}>
+              -{item.discount_pct}%
+            </span>
+          )}
           {' · IVA '}{item.tax_rate}%
         </p>
       </div>
 
-      {/* Qty controls */}
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1 shrink-0">
         <button
           onClick={() => onQtyChange(item.product_id, item.quantity - 1)}
-          className="w-7 h-7 rounded-md bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+          className="w-6 h-6 rounded border flex items-center justify-center transition-colors hover:bg-slate-100 active:bg-slate-200"
+          style={{ borderColor: XERO.border, color: XERO.muted }}
         >
           <Minus className="w-3 h-3" />
         </button>
-        <span className="w-8 text-center text-sm font-semibold tabular-nums">{item.quantity}</span>
+        <span className="w-8 text-center text-sm font-bold tabular-nums" style={{ color: XERO.text }}>
+          {item.quantity}
+        </span>
         <button
           onClick={() => onQtyChange(item.product_id, item.quantity + 1)}
-          className="w-7 h-7 rounded-md bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+          className="w-6 h-6 rounded border flex items-center justify-center transition-colors hover:bg-slate-100 active:bg-slate-200"
+          style={{ borderColor: XERO.border, color: XERO.muted }}
         >
           <Plus className="w-3 h-3" />
         </button>
       </div>
 
-      <p className="w-24 text-right text-sm font-bold text-white tabular-nums">{kz(item.line_total)}</p>
+      <p className="w-[72px] text-right text-xs font-bold tabular-nums shrink-0" style={{ color: XERO.text }}>
+        {kz(item.line_total)}
+      </p>
 
-      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-        <button onClick={() => onDiscount(item.product_id)} className="w-6 h-6 text-amber-400 hover:text-amber-300" title="Desconto">
-          <Tag className="w-4 h-4" />
+      <div className="flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+        <button
+          onClick={() => onDiscount(item.product_id)}
+          className="w-5 h-5 rounded flex items-center justify-center transition-colors hover:bg-amber-50"
+          style={{ color: XERO.warning }}
+          title="Desconto"
+        >
+          <Percent className="w-3 h-3" />
         </button>
-        <button onClick={() => onRemove(item.product_id)} className="w-6 h-6 text-red-400 hover:text-red-300" title="Remover">
-          <X className="w-4 h-4" />
+        <button
+          onClick={() => onRemove(item.product_id)}
+          className="w-5 h-5 rounded flex items-center justify-center transition-colors hover:bg-red-50"
+          style={{ color: XERO.danger }}
+          title="Remover"
+        >
+          <X className="w-3 h-3" />
         </button>
       </div>
     </div>
   );
 }
 
-// ── Payment Modal ─────────────────────────────────────────────────────────────
-function PaymentModal({
-  total, method, onMethodChange, onConfirm, onClose, processing,
-}: {
-  total: number;
-  method: PaymentMethod;
+/* ─── PaymentModal ─────────────────────────────────────────────────────────── */
+function PaymentModal({ total, method, onMethodChange, onConfirm, onClose, processing }: {
+  total: number; method: PaymentMethod;
   onMethodChange: (m: PaymentMethod) => void;
   onConfirm: (tendered: number) => void;
   onClose: () => void;
@@ -149,35 +203,36 @@ function PaymentModal({
 
   useEffect(() => {
     setTendered(total.toFixed(2));
-    setTimeout(() => inputRef.current?.select(), 50);
+    setTimeout(() => inputRef.current?.select(), 80);
   }, [total, method]);
 
   const numpadPress = (val: string) => {
-    if (val === '⌫') { setTendered(s => s.slice(0, -1) || '0'); return; }
-    if (val === '.' && tendered.includes('.')) return;
-    if (tendered === '0') { setTendered(val); return; }
-    setTendered(s => s + val);
+    setTendered(prev => {
+      if (val === '⌫') return prev.slice(0, -1) || '0';
+      if (val === '.' && prev.includes('.')) return prev;
+      if (prev === '0' && val !== '.') return val;
+      return prev + val;
+    });
   };
 
   const NUMPAD = ['7','8','9','4','5','6','1','2','3','.','0','⌫'];
   const METHODS: PaymentMethod[] = ['Dinheiro', 'Multicaixa', 'TPA', 'Crédito'];
 
-  // Smart quick amounts — deduplicated, human-readable labels
   const quickAmounts = useMemo(() => {
-    const candidates = [
+    const cands = [
       Math.ceil(total / 500) * 500,
       Math.ceil(total / 1000) * 1000,
       5000, 10000, 20000, 50000,
     ];
     const seen = new Set<number>();
-    return candidates
-      .filter(amt => { if (seen.has(amt) || amt <= 0) return false; seen.add(amt); return true; })
+    return cands
+      .filter(a => { if (seen.has(a) || a <= 0) return false; seen.add(a); return true; })
       .slice(0, 4)
-      .map(amt => ({
-        amt,
-        label: amt >= 1000
-          ? `${(amt / 1000) % 1 === 0 ? amt / 1000 : (amt / 1000).toFixed(1)}k`
-          : `${amt}`,
+      .map(a => ({
+        a,
+        label: a >= 1000
+          ? `${(a / 1000) % 1 === 0 ? a / 1000 : (a / 1000).toFixed(1)}k`
+          : `${a}`,
       }));
   }, [total]);
 
@@ -185,79 +240,117 @@ function PaymentModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm"
+      className="fixed inset-0 z-[200] flex flex-col justify-end sm:justify-center sm:items-center"
+      style={{
+        background: 'rgba(9,60,90,0.7)',
+        backdropFilter: 'blur(6px)',
+        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+      }}
       onClick={onClose}
     >
-      {/* Modal — bottom-sheet on mobile, centered on desktop. Always fits screen. */}
       <div
-        className="bg-[#0f172a] border border-white/10 rounded-t-3xl sm:rounded-2xl w-full sm:max-w-md shadow-2xl flex flex-col max-h-[95dvh]"
+        className="w-full sm:max-w-md flex flex-col rounded-t-3xl sm:rounded-2xl shadow-2xl overflow-hidden"
+        style={{
+          background: XERO.card,
+          maxHeight: 'calc(100dvh - env(safe-area-inset-top,0px) - 12px)',
+        }}
         onClick={e => e.stopPropagation()}
       >
-        {/* Drag handle (mobile) */}
+        {/* Drag handle */}
         <div className="flex justify-center pt-3 pb-1 sm:hidden shrink-0">
-          <div className="w-10 h-1 rounded-full bg-white/20" />
+          <div className="w-10 h-1 rounded-full bg-slate-200" />
         </div>
 
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3 shrink-0">
-          <h2 className="text-lg font-bold text-white">Pagamento</h2>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 text-white/50 hover:text-white">
-            <X className="w-5 h-5" />
+        {/* Header — Xero navy */}
+        <div
+          className="flex items-center justify-between px-5 py-3.5 shrink-0"
+          style={{ background: XERO.navy }}
+        >
+          <div className="flex items-center gap-2.5 text-white">
+            <div
+              className="w-7 h-7 rounded-lg flex items-center justify-center"
+              style={{ background: XERO.cyan }}
+            >
+              <Receipt className="w-4 h-4" />
+            </div>
+            <span className="font-bold text-base">Pagamento</span>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-white/60 hover:text-white hover:bg-white/10 transition-colors"
+          >
+            <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Scrollable body — never clips the confirm button */}
-        <div className="overflow-y-auto flex-1 px-5 pb-2 space-y-4">
+        {/* Scrollable body */}
+        <div className="overflow-y-auto flex-1 px-5 py-4 space-y-4" style={{ background: XERO.bg }}>
+
           {/* Total */}
-          <div className="bg-sky-500/10 border border-sky-500/20 rounded-2xl p-4 text-center">
-            <p className="text-xs text-sky-300 mb-1 uppercase tracking-wider">Total a pagar</p>
-            <p className="text-4xl font-black text-white tabular-nums">{kz(total)}</p>
+          <div
+            className="rounded-xl p-4 text-center border"
+            style={{ background: XERO.card, borderColor: XERO.border }}
+          >
+            <p className="text-[10px] uppercase tracking-widest mb-1 font-semibold" style={{ color: XERO.muted }}>
+              Total a pagar
+            </p>
+            <p className="text-4xl font-black tabular-nums" style={{ color: XERO.text }}>
+              {kz(total)}
+            </p>
           </div>
 
-          {/* Payment methods */}
+          {/* Methods */}
           <div className="grid grid-cols-4 gap-2">
             {METHODS.map(m => (
               <button
                 key={m}
                 onClick={() => onMethodChange(m)}
-                className={`flex flex-col items-center gap-1.5 py-3 rounded-xl border-2 text-xs font-semibold transition-all ${
-                  method === m
-                    ? 'border-sky-500 bg-sky-500/15 text-sky-300'
-                    : 'border-white/10 bg-white/5 text-white/60 hover:border-white/30'
-                }`}
+                className="flex flex-col items-center gap-1.5 py-3 rounded-xl border-2 text-[11px] font-bold transition-all active:scale-95"
+                style={{
+                  borderColor: method === m ? XERO.cyan : XERO.border,
+                  background: method === m ? XERO.cyan + '12' : XERO.card,
+                  color: method === m ? XERO.cyan : XERO.muted,
+                }}
               >
-                {PAYMENT_ICONS[m]}
+                {PAY_ICONS[m]}
                 {m}
               </button>
             ))}
           </div>
 
-          {/* Cash flow */}
           {method === 'Dinheiro' && (
             <>
               <div>
-                <label className="text-xs text-white/50 mb-1.5 block">Valor entregue pelo cliente</label>
+                <label className="text-[10px] uppercase tracking-wider font-semibold mb-1.5 block" style={{ color: XERO.muted }}>
+                  Valor entregue
+                </label>
                 <input
                   ref={inputRef}
                   type="number"
                   inputMode="decimal"
                   value={tendered}
                   onChange={e => setTendered(e.target.value)}
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-2xl font-bold text-white text-right tabular-nums focus:outline-none focus:border-sky-500"
+                  className="w-full rounded-xl px-4 py-3 text-2xl font-black text-right tabular-nums focus:outline-none transition-colors border-2"
+                  style={{
+                    background: XERO.card,
+                    borderColor: XERO.cyan,
+                    color: XERO.text,
+                  }}
                 />
               </div>
 
-              {/* Quick amounts — deduplicated & correctly labelled */}
+              {/* Quick amounts */}
               <div className="grid grid-cols-4 gap-2">
-                {quickAmounts.map(({ amt, label }) => (
+                {quickAmounts.map(({ a, label }) => (
                   <button
-                    key={amt}
-                    onClick={() => setTendered(amt.toFixed(2))}
-                    className={`py-3 rounded-xl text-sm font-bold transition-all ${
-                      tenderedNum === amt
-                        ? 'bg-sky-600 text-white'
-                        : 'bg-white/8 hover:bg-white/15 text-white/70'
-                    }`}
+                    key={a}
+                    onClick={() => setTendered(a.toFixed(2))}
+                    className="py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 border"
+                    style={{
+                      background: tenderedNum === a ? XERO.cyan : XERO.card,
+                      borderColor: tenderedNum === a ? XERO.cyan : XERO.border,
+                      color: tenderedNum === a ? '#fff' : XERO.text,
+                    }}
                   >
                     {label}
                   </button>
@@ -270,7 +363,8 @@ function PaymentModal({
                   <button
                     key={k}
                     onClick={() => numpadPress(k)}
-                    className="py-4 rounded-xl bg-white/8 hover:bg-white/15 active:bg-sky-600/30 active:scale-95 text-xl font-semibold text-white transition-all"
+                    className="py-3.5 rounded-xl text-lg font-semibold transition-all active:scale-95 border hover:border-[#13b5ea]"
+                    style={{ background: XERO.card, borderColor: XERO.border, color: XERO.text }}
                   >
                     {k}
                   </button>
@@ -279,33 +373,39 @@ function PaymentModal({
 
               {/* Change */}
               {change > 0 && (
-                <div className="flex items-center justify-between bg-green-500/10 border border-green-500/20 rounded-2xl px-5 py-3">
-                  <span className="text-sm text-green-300 font-semibold">Troco</span>
-                  <span className="text-2xl font-black text-green-400 tabular-nums">{kz(change)}</span>
+                <div
+                  className="flex items-center justify-between rounded-xl px-5 py-3 border"
+                  style={{ background: '#21ab6b10', borderColor: XERO.success + '40' }}
+                >
+                  <span className="text-sm font-bold" style={{ color: XERO.success }}>Troco</span>
+                  <span className="text-2xl font-black tabular-nums" style={{ color: XERO.success }}>{kz(change)}</span>
                 </div>
               )}
             </>
           )}
 
-          {/* Non-cash instruction */}
           {method !== 'Dinheiro' && (
-            <div className="bg-white/5 border border-white/10 rounded-2xl p-5 text-center text-white/60 text-sm">
-              {method === 'Multicaixa' && '💳 Processe o pagamento no TPA Multicaixa'}
-              {method === 'TPA' && '📱 Aguarde confirmação do terminal TPA'}
-              {method === 'Crédito' && '📝 Venda registada a crédito — emite factura'}
+            <div
+              className="rounded-xl p-5 text-center border"
+              style={{ background: XERO.card, borderColor: XERO.border }}
+            >
+              {method === 'Multicaixa' && <><CreditCard className="w-8 h-8 mx-auto mb-2" style={{ color: XERO.cyan }} /><p className="text-sm" style={{ color: XERO.muted }}>Processe no TPA Multicaixa</p></>}
+              {method === 'TPA' && <><Smartphone className="w-8 h-8 mx-auto mb-2 text-purple-500" /><p className="text-sm" style={{ color: XERO.muted }}>Aguarde confirmação do terminal TPA</p></>}
+              {method === 'Crédito' && <><Tag className="w-8 h-8 mx-auto mb-2" style={{ color: XERO.warning }} /><p className="text-sm" style={{ color: XERO.muted }}>Venda registada a crédito</p></>}
             </div>
           )}
         </div>
 
-        {/* ── CONFIRM — always visible, never clipped ── */}
-        <div className="px-5 py-4 border-t border-white/5 shrink-0 bg-[#0f172a]">
+        {/* Confirm — always visible */}
+        <div className="px-5 py-4 border-t shrink-0" style={{ background: XERO.card, borderColor: XERO.border }}>
           <button
             onClick={() => onConfirm(tenderedNum)}
             disabled={!canConfirm}
-            className="w-full py-4 rounded-2xl bg-gradient-to-r from-sky-600 to-sky-500 hover:from-sky-500 hover:to-sky-400 active:scale-[0.98] text-white font-black text-lg tracking-wide transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-sky-900/40"
+            className="w-full py-4 rounded-xl font-black text-lg text-white tracking-wide transition-all active:scale-[0.98] disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg"
+            style={{ background: canConfirm ? XERO.cyan : XERO.muted }}
           >
             {processing ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle2 className="w-5 h-5" />}
-            {processing ? 'A processar...' : 'Confirmar Pagamento'}
+            {processing ? 'A processar…' : 'Confirmar Pagamento'}
           </button>
         </div>
       </div>
@@ -313,439 +413,584 @@ function PaymentModal({
   );
 }
 
-// ── Session Modal ─────────────────────────────────────────────────────────────
-function SessionModal({ onOpen, onClose }: { onOpen: (name: string, balance: number) => void; onClose: () => void }) {
+/* ─── SessionModal ─────────────────────────────────────────────────────────── */
+function SessionModal({ onOpen, onClose }: { onOpen: (n: string, b: number) => void; onClose: () => void }) {
   const [name, setName] = useState('Caixa 1');
   const [balance, setBalance] = useState('0');
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-      <div className="bg-[#0f172a] border border-white/10 rounded-2xl w-full max-w-sm p-6">
-        <h2 className="text-xl font-bold text-white mb-5">Abrir Sessão de Caixa</h2>
-        <div className="space-y-4 mb-6">
+    <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center" style={{ background: 'rgba(9,60,90,0.65)', backdropFilter: 'blur(4px)' }} onClick={onClose}>
+      <div className="w-full sm:max-w-sm rounded-t-3xl sm:rounded-2xl shadow-2xl overflow-hidden" style={{ background: XERO.card }} onClick={e => e.stopPropagation()}>
+        <div className="px-5 py-4" style={{ background: XERO.navy }}>
+          <h3 className="text-white font-bold text-base flex items-center gap-2">
+            <BarChart3 className="w-4 h-4" style={{ color: XERO.cyan }} />
+            Abrir Sessão de Caixa
+          </h3>
+        </div>
+        <div className="p-5 space-y-3" style={{ background: XERO.bg }}>
           <div>
-            <label className="text-xs text-white/50 mb-1 block">Nome do Terminal</label>
+            <label className="text-xs font-semibold uppercase tracking-wider mb-1 block" style={{ color: XERO.muted }}>Nome da caixa</label>
             <input value={name} onChange={e => setName(e.target.value)}
-              className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-white focus:outline-none focus:border-sky-500" />
+              className="w-full rounded-lg border px-4 py-2.5 text-sm focus:outline-none focus:border-[#13b5ea] transition-colors"
+              style={{ borderColor: XERO.border, color: XERO.text, background: XERO.card }} />
           </div>
           <div>
-            <label className="text-xs text-white/50 mb-1 block">Fundo de Caixa (Kz)</label>
+            <label className="text-xs font-semibold uppercase tracking-wider mb-1 block" style={{ color: XERO.muted }}>Fundo de caixa (Kz)</label>
             <input type="number" value={balance} onChange={e => setBalance(e.target.value)}
-              className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-white focus:outline-none focus:border-sky-500" />
+              className="w-full rounded-lg border px-4 py-2.5 text-sm focus:outline-none focus:border-[#13b5ea] transition-colors"
+              style={{ borderColor: XERO.border, color: XERO.text, background: XERO.card }} />
           </div>
         </div>
-        <div className="flex gap-3">
-          <button onClick={onClose} className="flex-1 py-3 rounded-xl border border-white/10 text-white/70 hover:bg-white/5 font-semibold">Cancelar</button>
+        <div className="flex gap-2 px-5 py-4 border-t" style={{ borderColor: XERO.border, background: XERO.card }}>
+          <button onClick={onClose} className="flex-1 py-3 rounded-lg font-semibold text-sm border transition-colors hover:bg-slate-50" style={{ borderColor: XERO.border, color: XERO.muted }}>Cancelar</button>
           <button onClick={() => onOpen(name, parseFloat(balance) || 0)}
-            className="flex-1 py-3 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold">Abrir Caixa</button>
+            className="flex-1 py-3 rounded-lg font-bold text-sm text-white transition-all hover:opacity-90 active:scale-[0.98]"
+            style={{ background: XERO.cyan }}>
+            Abrir Caixa
+          </button>
         </div>
       </div>
     </div>
   );
 }
 
-// ── Discount Modal ─────────────────────────────────────────────────────────────
+/* ─── DiscountModal ────────────────────────────────────────────────────────── */
 function DiscountModal({ productId, current, onApply, onClose }: {
-  productId: string; current: number; onApply: (id: string, pct: number) => void; onClose: () => void;
+  productId: string; current: number;
+  onApply: (id: string, pct: number) => void;
+  onClose: () => void;
 }) {
-  const [pct, setPct] = useState(current.toString());
+  const [pct, setPct] = useState(String(current));
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70" onClick={onClose}>
-      <div className="bg-[#0f172a] border border-white/10 rounded-2xl w-full max-w-xs p-5" onClick={e => e.stopPropagation()}>
-        <h3 className="text-lg font-bold text-white mb-4">Desconto (%)</h3>
-        <div className="grid grid-cols-4 gap-2 mb-4">
-          {[5, 10, 15, 20, 25, 30, 40, 50].map(d => (
-            <button key={d} onClick={() => setPct(d.toString())}
-              className={`py-2 rounded-lg text-sm font-bold transition-all ${pct === d.toString() ? 'bg-amber-500 text-black' : 'bg-white/10 text-white hover:bg-white/20'}`}>
-              {d}%
-            </button>
-          ))}
+    <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center" style={{ background: 'rgba(9,60,90,0.65)', backdropFilter: 'blur(4px)' }} onClick={onClose}>
+      <div className="w-full sm:max-w-xs rounded-t-3xl sm:rounded-2xl overflow-hidden shadow-2xl" style={{ background: XERO.card }} onClick={e => e.stopPropagation()}>
+        <div className="px-5 py-4" style={{ background: XERO.navy }}>
+          <h3 className="text-white font-bold text-base flex items-center gap-2">
+            <Percent className="w-4 h-4" style={{ color: XERO.warning }} />
+            Aplicar Desconto
+          </h3>
         </div>
-        <input type="number" min="0" max="100" value={pct} onChange={e => setPct(e.target.value)}
-          className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-center text-xl font-bold mb-4 focus:outline-none focus:border-amber-500" />
-        <div className="flex gap-3">
-          <button onClick={() => { onApply(productId, 0); onClose(); }} className="flex-1 py-2.5 rounded-lg border border-white/10 text-white/60 text-sm">Remover</button>
-          <button onClick={() => { onApply(productId, Math.min(100, parseFloat(pct) || 0)); onClose(); }}
-            className="flex-1 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold text-sm">Aplicar</button>
+        <div className="p-4 space-y-3" style={{ background: XERO.bg }}>
+          <div className="grid grid-cols-3 gap-2">
+            {[5,10,15,20,25,50].map(q => (
+              <button key={q} onClick={() => setPct(String(q))}
+                className="py-2.5 rounded-lg text-sm font-bold border transition-all active:scale-95"
+                style={{
+                  background: pct === String(q) ? XERO.warning : XERO.card,
+                  borderColor: pct === String(q) ? XERO.warning : XERO.border,
+                  color: pct === String(q) ? '#fff' : XERO.text,
+                }}>
+                {q}%
+              </button>
+            ))}
+          </div>
+          <input type="number" min="0" max="100" value={pct} onChange={e => setPct(e.target.value)}
+            className="w-full rounded-lg border-2 px-4 py-3 text-xl font-bold text-center focus:outline-none"
+            style={{ borderColor: XERO.warning, color: XERO.text, background: XERO.card }} />
+        </div>
+        <div className="flex gap-2 px-4 py-4 border-t" style={{ borderColor: XERO.border, background: XERO.card }}>
+          <button onClick={onClose} className="flex-1 py-3 rounded-lg border font-semibold text-sm transition-colors hover:bg-slate-50" style={{ borderColor: XERO.border, color: XERO.muted }}>Cancelar</button>
+          <button onClick={() => { onApply(productId, Math.max(0, Math.min(100, parseFloat(pct)||0))); onClose(); }}
+            className="flex-1 py-3 rounded-lg font-bold text-sm text-white transition-all hover:opacity-90"
+            style={{ background: XERO.warning }}>
+            Aplicar
+          </button>
         </div>
       </div>
     </div>
   );
 }
 
-// ── Main POS View ─────────────────────────────────────────────────────────────
+/* ─── SuccessOverlay ───────────────────────────────────────────────────────── */
+function SuccessOverlay({ sale, onClose }: { sale: any; onClose: () => void }) {
+  useEffect(() => { const t = setTimeout(onClose, 4000); return () => clearTimeout(t); }, [onClose]);
+  return (
+    <div className="fixed inset-0 z-[300] flex items-center justify-center cursor-pointer" style={{ background: 'rgba(9,60,90,0.85)', backdropFilter: 'blur(8px)' }} onClick={onClose}>
+      <div className="text-center px-8 py-10 rounded-2xl shadow-2xl max-w-xs w-full" style={{ background: XERO.card }}>
+        <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce" style={{ background: XERO.success + '20' }}>
+          <CheckCircle2 className="w-9 h-9" style={{ color: XERO.success }} />
+        </div>
+        <p className="text-xl font-black mb-1" style={{ color: XERO.text }}>Venda Registada!</p>
+        <p className="font-mono font-bold text-base mb-4" style={{ color: XERO.cyan }}>{sale?.invoice_number}</p>
+        {sale?.change > 0 && (
+          <div className="rounded-xl px-6 py-3 border" style={{ background: XERO.success + '10', borderColor: XERO.success + '30' }}>
+            <p className="text-xs font-semibold mb-1" style={{ color: XERO.success }}>Troco</p>
+            <p className="text-3xl font-black tabular-nums" style={{ color: XERO.success }}>{kz(sale.change)}</p>
+          </div>
+        )}
+        <p className="text-xs mt-4" style={{ color: XERO.muted }}>Toque para continuar</p>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Main POSView ─────────────────────────────────────────────────────────── */
 export default function POSView() {
   const router = useRouter();
 
-  // ── State ──────────────────────────────────────────────────────────────────
-  const [products, setProducts]         = useState<POSProduct[]>([]);
-  const [categories, setCategories]     = useState<string[]>([]);
-  const [activeCategory, setActiveCategory] = useState<string>('Todos');
-  const [search, setSearch]             = useState('');
-  const [cart, setCart]                 = useState<POSCartItem[]>([]);
-  const [session, setSession]           = useState<POSSession | null>(null);
-  const [loading, setLoading]           = useState(true);
-  const [processing, setProcessing]     = useState(false);
-  const [showPayment, setShowPayment]   = useState(false);
-  const [showSession, setShowSession]   = useState(false);
-  const [showDiscount, setShowDiscount] = useState<string | null>(null);
+  const [products, setProducts]           = useState<POSProduct[]>([]);
+  const [categories, setCategories]       = useState<string[]>([]);
+  const [activeCategory, setActiveCategory] = useState('Todos');
+  const [search, setSearch]               = useState('');
+  const [cart, setCart]                   = useState<POSCartItem[]>([]);
+  const [loading, setLoading]             = useState(true);
+  const [processing, setProcessing]       = useState(false);
+  const [showPayment, setShowPayment]     = useState(false);
+  const [showSession, setShowSession]     = useState(false);
+  const [showDiscount, setShowDiscount]   = useState<string | null>(null);
+  const [session, setSession]             = useState<POSSession | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('Dinheiro');
-  const [lastSale, setLastSale]         = useState<any>(null);
-  const [clock, setClock]               = useState(new Date());
-  const [companyInfo, setCompanyInfo]   = useState<any>(null);
-  const searchRef = useRef<HTMLInputElement>(null);
+  const [lastSale, setLastSale]           = useState<any>(null);
+  const [clock, setClock]                 = useState(new Date());
+  const [companyInfo, setCompanyInfo]     = useState<any>(null);
+  const [online, setOnline]               = useState(true);
+  const [printerOk, setPrinterOk]         = useState(false);
 
-  // Live clock
+  const searchRef = useRef<HTMLInputElement>(null);
+  const scanStart = useRef<number>(0);
+
+  // Clock
+  useEffect(() => { const t = setInterval(() => setClock(new Date()), 1000); return () => clearInterval(t); }, []);
+
+  // Online
   useEffect(() => {
-    const t = setInterval(() => setClock(new Date()), 1000);
-    return () => clearInterval(t);
+    const on = () => setOnline(true);
+    const off = () => setOnline(false);
+    window.addEventListener('online', on);
+    window.addEventListener('offline', off);
+    setOnline(navigator.onLine);
+    return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off); };
   }, []);
 
-  // ── Load products + session ────────────────────────────────────────────────
+  // Keyboard shortcuts
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if (e.key === 'F2') { e.preventDefault(); searchRef.current?.focus(); }
+      if (e.key === 'F4') { e.preventDefault(); if (cart.length > 0) setShowPayment(true); }
+      if (e.key === 'F5') { e.preventDefault(); setCart([]); }
+      if (e.key === 'F9') { e.preventDefault(); if (lastSale) handlePrint(lastSale); }
+      if (e.key === 'Escape') { setShowPayment(false); setShowDiscount(null); }
+    };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [cart, lastSale]);
+
+  // ── Load ──────────────────────────────────────────────────────────────────
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [prodRes, sessRes, compRes] = await Promise.all([
+      const [pR, sR, cR] = await Promise.all([
         fetch('/api/products?limit=500&active=true'),
         fetch('/api/pos/session'),
         fetch('/api/company'),
       ]);
-      const [prodJson, sessJson, compJson] = await Promise.all([
-        prodRes.json(), sessRes.json(), compRes.json(),
-      ]);
-
-      const prods: POSProduct[] = prodJson.products ?? [];
+      const [pJ, sJ, cJ] = await Promise.all([pR.json(), sR.json(), cR.json()]);
+      const prods: POSProduct[] = pJ.products ?? [];
       setProducts(prods);
-
-      const cats = Array.from(new Set(prods.map(p => p.category).filter(Boolean))) as string[];
-      setCategories(cats);
-
-      setSession(sessJson.session ?? null);
-      setCompanyInfo(compJson.company ?? null);
-    } catch {
-      toast.error('Erro ao carregar dados do POS');
-    } finally {
-      setLoading(false);
-    }
+      setCategories(Array.from(new Set(prods.map(p => p.category).filter(Boolean))) as string[]);
+      if (sJ.session) setSession(sJ.session);
+      if (cJ.company) setCompanyInfo(cJ.company);
+    } catch { toast.error('Erro ao carregar produtos'); }
+    finally { setLoading(false); }
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // ── Keyboard shortcuts ────────────────────────────────────────────────────
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      // F2 → focus search
-      if (e.key === 'F2') { e.preventDefault(); searchRef.current?.focus(); }
-      // F4 → open payment
-      if (e.key === 'F4' && cart.length > 0) { e.preventDefault(); setShowPayment(true); }
-      // Escape → close modals / clear search
-      if (e.key === 'Escape') { setShowPayment(false); setSearch(''); }
-      // F5 → clear cart
-      if (e.key === 'F5') { e.preventDefault(); setCart([]); }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [cart]);
-
-  // ── Filtered products ─────────────────────────────────────────────────────
+  // ── Filtered ──────────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
-    let res = products;
-    if (activeCategory !== 'Todos') res = res.filter(p => p.category === activeCategory);
+    let list = products;
+    if (activeCategory !== 'Todos') list = list.filter(p => p.category === activeCategory);
     if (search) {
       const q = search.toLowerCase();
-      res = res.filter(p =>
+      list = list.filter(p =>
         p.name.toLowerCase().includes(q) ||
         p.sku?.toLowerCase().includes(q) ||
-        (p as any).barcode?.toLowerCase().includes(q)
+        (p as any).barcode?.includes(q)
       );
     }
-    return res;
+    return list;
   }, [products, activeCategory, search]);
 
-  // ── Cart operations ────────────────────────────────────────────────────────
+  // ── Cart ──────────────────────────────────────────────────────────────────
   const addToCart = useCallback((product: POSProduct) => {
     setCart(prev => {
-      const existing = prev.find(i => i.product_id === product.id);
-      if (existing) {
-        return prev.map(i => i.product_id === product.id
-          ? calcLine({ ...i, quantity: i.quantity + 1 })
-          : i
-        );
-      }
-      return [...prev, calcLine({
-        product_id: product.id, name: product.name,
-        price: product.price, tax_rate: product.tax_rate,
-        quantity: 1, discount_pct: 0,
-        line_subtotal: 0, line_tax: 0, line_total: 0,
-      })];
+      const ex = prev.find(i => i.product_id === product.id);
+      if (ex) return prev.map(i => i.product_id === product.id ? calcLine({ ...i, quantity: i.quantity + 1 }) : i);
+      return [...prev, calcLine({ product_id: product.id, name: product.name, price: product.price, tax_rate: product.tax_rate, quantity: 1, discount_pct: 0, line_subtotal: 0, line_tax: 0, line_total: 0 })];
     });
   }, []);
 
-  const changeQty = useCallback((productId: string, qty: number) => {
-    if (qty <= 0) { setCart(prev => prev.filter(i => i.product_id !== productId)); return; }
-    setCart(prev => prev.map(i => i.product_id === productId ? calcLine({ ...i, quantity: qty }) : i));
+  const changeQty = useCallback((id: string, qty: number) => {
+    if (qty <= 0) { setCart(prev => prev.filter(i => i.product_id !== id)); return; }
+    setCart(prev => prev.map(i => i.product_id === id ? calcLine({ ...i, quantity: qty }) : i));
   }, []);
+  const removeFromCart = useCallback((id: string) => setCart(prev => prev.filter(i => i.product_id !== id)), []);
+  const applyDiscount  = useCallback((id: string, pct: number) => setCart(prev => prev.map(i => i.product_id === id ? calcLine({ ...i, discount_pct: pct }) : i)), []);
 
-  const removeFromCart = useCallback((productId: string) => {
-    setCart(prev => prev.filter(i => i.product_id !== productId));
-  }, []);
+  // ── Totals ────────────────────────────────────────────────────────────────
+  const totals = useMemo(() => ({
+    subtotal: +cart.reduce((s, i) => s + i.line_subtotal, 0).toFixed(2),
+    tax:      +cart.reduce((s, i) => s + i.line_tax, 0).toFixed(2),
+    total:    +cart.reduce((s, i) => s + i.line_total, 0).toFixed(2),
+    items:     cart.reduce((s, i) => s + i.quantity, 0),
+  }), [cart]);
 
-  const applyDiscount = useCallback((productId: string, pct: number) => {
-    setCart(prev => prev.map(i => i.product_id === productId ? calcLine({ ...i, discount_pct: pct }) : i));
-  }, []);
+  // ── Barcode ───────────────────────────────────────────────────────────────
+  const onSearchChange = (val: string) => {
+    if (!scanStart.current) scanStart.current = Date.now();
+    setSearch(val);
+    if (val.length > 4 && Date.now() - scanStart.current < 250) {
+      const match = products.find(p => p.sku === val || (p as any).barcode === val);
+      if (match) { addToCart(match); setSearch(''); scanStart.current = 0; toast.success(`${match.name} adicionado`, { duration: 1500 }); return; }
+    }
+    if (!val) scanStart.current = 0;
+  };
 
-  // ── Totals ──────────────────────────────────────────────────────────────────
-  const totals = useMemo(() => {
-    const subtotal = +cart.reduce((s, i) => s + i.line_subtotal, 0).toFixed(2);
-    const tax      = +cart.reduce((s, i) => s + i.line_tax, 0).toFixed(2);
-    const total    = +cart.reduce((s, i) => s + i.line_total, 0).toFixed(2);
-    return { subtotal, tax, total, items: cart.reduce((s, i) => s + i.quantity, 0) };
-  }, [cart]);
+  // ── Print ─────────────────────────────────────────────────────────────────
+  const handlePrint = async (saleData?: any) => {
+    const sale = saleData ?? lastSale;
+    if (!sale) { toast.error('Nenhuma venda para imprimir'); return; }
+    const data: ReceiptData = {
+      companyName: companyInfo?.name ?? 'Empresa', companyNif: companyInfo?.nif ?? '',
+      companyAddress: companyInfo?.address ?? '', invoiceNumber: sale.invoice_number ?? '',
+      issuedAt: sale.issued_at ?? new Date().toISOString(),
+      items: (sale.items ?? cart).map((i: any) => ({ name: i.name, qty: i.quantity, price: i.price, total: i.line_total ?? i.total })),
+      subtotal: totals.subtotal, tax: totals.tax, total: totals.total,
+      paymentMethod: sale.paymentMethod ?? paymentMethod,
+      amountTendered: sale.amountTendered, change: sale.change,
+    };
+    if (isThermalConnected()) {
+      const r = await printToThermal(data);
+      if (!r.ok) { toast.error(r.error ?? 'Falha térmica'); printReceiptFallback(data); }
+      else toast.success('Impresso na impressora térmica ✓');
+    } else {
+      printReceiptFallback(data);
+    }
+  };
 
-  // ── Session management ─────────────────────────────────────────────────────
+  const connectPrinter = async () => {
+    const r = await connectThermalPrinter();
+    if (r.ok) { setPrinterOk(true); toast.success('Impressora térmica conectada!'); }
+    else toast.error(r.error ?? 'Falha ao conectar');
+  };
+
+  // ── Session ───────────────────────────────────────────────────────────────
   const openSession = async (name: string, balance: number) => {
     try {
-      const res = await fetch('/api/pos/session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'open', terminal_name: name, opening_balance: balance }),
-      });
-      const json = await res.json();
-      if (!res.ok) { toast.error(json.error); return; }
-      setSession(json.session);
-      setShowSession(false);
-      toast.success(`${name} aberta com sucesso!`);
+      const r = await fetch('/api/pos/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'open', terminal_name: name, opening_balance: balance }) });
+      const j = await r.json();
+      if (!r.ok) { toast.error(j.error); return; }
+      setSession(j.session); setShowSession(false); toast.success(`Caixa "${name}" aberta!`);
     } catch { toast.error('Erro ao abrir sessão'); }
   };
 
   const closeSession = async () => {
-    if (!session) return;
-    if (!confirm('Fechar sessão de caixa?')) return;
-    try {
-      const res = await fetch('/api/pos/session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'close', session_id: session.id }),
-      });
-      if (res.ok) { setSession(null); toast.success('Sessão fechada'); }
-    } catch { toast.error('Erro ao fechar sessão'); }
+    if (!session || !confirm('Fechar sessão?')) return;
+    const r = await fetch('/api/pos/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'close', session_id: session.id }) });
+    if (r.ok) { setSession(null); toast.success('Sessão fechada'); router.push('/pos-close'); }
   };
 
-  // ── Checkout ────────────────────────────────────────────────────────────────
+  // ── Checkout ──────────────────────────────────────────────────────────────
   const handleCheckout = async (amountTendered: number) => {
-    if (cart.length === 0) return;
+    if (!cart.length) return;
     setProcessing(true);
+    const snap = [...cart];
     try {
-      const res = await fetch('/api/pos/sale', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          session_id: session?.id ?? null,
-          client_id: null,
-          items: cart,
-          payment_method: paymentMethod,
-          amount_tendered: amountTendered,
-          notes: null,
-          tax_exempt: false,
-        }),
+      const r = await fetch('/api/pos/sale', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: session?.id ?? null, client_id: null, items: cart, payment_method: paymentMethod, amount_tendered: amountTendered, notes: null, tax_exempt: false }),
       });
-      const json = await res.json();
-      if (!res.ok) { toast.error(json.error ?? 'Erro no pagamento'); return; }
+      const j = await r.json();
+      if (!r.ok) { toast.error(j.error ?? 'Erro no pagamento'); return; }
+      const sale = j.invoice ?? j;
+      const meta = { ...sale, paymentMethod, amountTendered, change: j.change ?? 0, items: snap };
+      setLastSale(meta); setCart([]); setShowPayment(false);
 
-      const sale = json.invoice ?? json;
-      setLastSale({ ...sale, paymentMethod, amountTendered, change: json.change ?? 0 });
-      setCart([]);
-      setShowPayment(false);
-      toast.success(`Venda registada · ${sale.invoice_number}`, { duration: 4000 });
-
-      // Auto-print receipt
-      printReceiptFallback({
-        companyName:    companyInfo?.name ?? 'Empresa',
-        companyNif:     companyInfo?.nif ?? '',
-        companyAddress: companyInfo?.address ?? '',
-        invoiceNumber:  sale.invoice_number,
-        issuedAt:       sale.issued_at ?? new Date().toISOString(),
-        items:          cart.map(i => ({ name: i.name, qty: i.quantity, price: i.price, total: i.line_total })),
-        subtotal:       totals.subtotal,
-        tax:            totals.tax,
-        total:          totals.total,
-        paymentMethod,
-        amountTendered: paymentMethod === 'Dinheiro' ? amountTendered : undefined,
-        change:         json.change,
-      });
-    } catch (e: any) {
-      toast.error(e?.message ?? 'Erro inesperado');
-    } finally {
-      setProcessing(false);
-    }
+      // Auto-print
+      const data: ReceiptData = {
+        companyName: companyInfo?.name ?? 'Empresa', companyNif: companyInfo?.nif ?? '',
+        companyAddress: companyInfo?.address ?? '', invoiceNumber: sale.invoice_number,
+        issuedAt: sale.issued_at ?? new Date().toISOString(),
+        items: snap.map(i => ({ name: i.name, qty: i.quantity, price: i.price, total: i.line_total })),
+        subtotal: totals.subtotal, tax: totals.tax, total: totals.total, paymentMethod,
+        amountTendered: paymentMethod === 'Dinheiro' ? amountTendered : undefined, change: j.change,
+      };
+      if (isThermalConnected()) printToThermal(data).then(res => { if (!res.ok) printReceiptFallback(data); });
+      else printReceiptFallback(data);
+    } catch (e: any) { toast.error(e?.message ?? 'Erro inesperado'); }
+    finally { setProcessing(false); }
   };
 
-  // ── Barcode scanner detection in search ───────────────────────────────────
-  const searchStartTime = useRef<number>(0);
-  const onSearchChange = (val: string) => {
-    if (!searchStartTime.current) searchStartTime.current = Date.now();
-    setSearch(val);
-    // Auto-select if single product match after scanner input
-    if (val.length > 4) {
-      const elapsed = Date.now() - searchStartTime.current;
-      const isScanner = elapsed < 300; // typed in < 300ms → scanner
-      if (isScanner) {
-        const match = products.find(p => p.sku === val || (p as any).barcode === val);
-        if (match) {
-          addToCart(match);
-          setSearch('');
-          searchStartTime.current = 0;
-        }
-      }
-    }
-    if (val === '') searchStartTime.current = 0;
-  };
-
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // ── Loading ───────────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="fixed inset-0 bg-[#060d1a] flex items-center justify-center">
+      <div className="fixed inset-0 flex items-center justify-center" style={{ background: XERO.bg }}>
         <div className="text-center">
-          <Loader2 className="w-10 h-10 text-sky-500 animate-spin mx-auto mb-3" />
-          <p className="text-white/60 text-sm">A carregar POS…</p>
+          <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ background: XERO.cyan + '15' }}>
+            <ShoppingCart className="w-7 h-7 animate-pulse" style={{ color: XERO.cyan }} />
+          </div>
+          <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" style={{ color: XERO.cyan }} />
+          <p className="text-sm" style={{ color: XERO.muted }}>A carregar POS…</p>
         </div>
       </div>
     );
   }
 
+  /* ─── RENDER ─────────────────────────────────────────────────────────────── */
   return (
-    <div className="fixed inset-0 bg-[#060d1a] flex flex-col overflow-hidden text-white select-none">
+    <div
+      className="fixed inset-0 flex flex-col overflow-hidden"
+      style={{ background: XERO.bg, paddingTop: 'env(safe-area-inset-top, 0px)' }}
+    >
 
-      {/* ── TOP BAR ──────────────────────────────────────────────────────── */}
-      <header className="flex items-center gap-3 px-4 py-2.5 bg-[#0a1628] border-b border-white/5 shrink-0">
-        <button onClick={() => router.push('/dashboard')}
-          className="p-1.5 rounded-lg hover:bg-white/10 transition-colors text-white/60 hover:text-white">
-          <ChevronLeft className="w-5 h-5" />
+      {/* ── TOP BAR (Xero Navy) ────────────────────────────────────────────── */}
+      <header
+        className="flex items-center gap-2 px-4 h-12 shrink-0 shadow"
+        style={{ background: XERO.navy }}
+      >
+        {/* Logo + Back */}
+        <button
+          onClick={() => router.push('/dashboard')}
+          className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+        >
+          <ChevronLeft className="w-4 h-4 text-white/60" />
+          <div className="w-6 h-6 rounded flex items-center justify-center font-black text-xs text-white" style={{ background: XERO.cyan }}>
+            FA
+          </div>
+          <span className="font-bold text-white text-sm hidden sm:block">FaturaAO</span>
         </button>
 
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-sky-600 flex items-center justify-center">
-            <ShoppingCart className="w-4 h-4" />
-          </div>
-          <span className="font-bold text-sm">POS</span>
-          {companyInfo && <span className="text-white/40 text-xs hidden sm:block">· {companyInfo.name}</span>}
+        {/* Divider */}
+        <div className="h-4 w-px mx-1 bg-white/20" />
+
+        {/* POS label */}
+        <div className="flex items-center gap-1.5">
+          <ShoppingCart className="w-4 h-4" style={{ color: XERO.cyan }} />
+          <span className="font-bold text-white text-sm">Ponto de Venda</span>
+          {companyInfo && (
+            <span className="text-white/40 text-xs hidden md:block">· {companyInfo.name}</span>
+          )}
         </div>
 
-        {/* Session indicator */}
-        <div className="flex items-center gap-2 ml-2">
-          {session
-            ? <span className="flex items-center gap-1.5 text-xs text-green-400 bg-green-400/10 border border-green-400/20 px-2.5 py-1 rounded-full">
-                <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
-                {session.terminal_name}
-              </span>
-            : <button onClick={() => setShowSession(true)}
-                className="flex items-center gap-1.5 text-xs text-amber-400 bg-amber-400/10 border border-amber-400/20 px-2.5 py-1 rounded-full hover:bg-amber-400/15 transition-colors">
-                <Clock className="w-3 h-3" />
-                Abrir Caixa
-              </button>
-          }
-        </div>
+        {/* Session */}
+        {session
+          ? (
+            <span
+              className="flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-full ml-2"
+              style={{ background: XERO.success + '20', color: XERO.success, border: `1px solid ${XERO.success}40` }}
+            >
+              <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: XERO.success }} />
+              {session.terminal_name}
+            </span>
+          ) : (
+            <button
+              onClick={() => setShowSession(true)}
+              className="flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-full ml-2 transition-opacity hover:opacity-80"
+              style={{ background: XERO.warning + '20', color: XERO.warning, border: `1px solid ${XERO.warning}40` }}
+            >
+              <Clock className="w-3 h-3" />
+              Abrir Caixa
+            </button>
+          )
+        }
 
-        <div className="ml-auto flex items-center gap-3">
+        <div className="flex-1" />
+
+        {/* Right controls */}
+        <div className="flex items-center gap-1">
+          {/* Online */}
+          <span title={online ? 'Online' : 'Sem ligação'} className="flex items-center justify-center w-8 h-8">
+            {online
+              ? <Wifi className="w-3.5 h-3.5" style={{ color: XERO.success }} />
+              : <WifiOff className="w-3.5 h-3.5 animate-pulse" style={{ color: XERO.danger }} />
+            }
+          </span>
+
+          {/* AGT badge */}
+          <span title="Certificação AGT" className="flex items-center justify-center w-8 h-8">
+            <Shield className="w-3.5 h-3.5 text-purple-400" />
+          </span>
+
           {/* Clock */}
-          <span className="text-sm tabular-nums text-white/60 hidden sm:block">
+          <span className="text-xs tabular-nums text-white/50 font-mono hidden sm:block px-2">
             {clock.toLocaleTimeString('pt-AO', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
           </span>
 
-          <button onClick={loadData} className="p-1.5 rounded-lg hover:bg-white/10 text-white/50 hover:text-white transition-colors" title="Actualizar (F5)">
-            <RefreshCw className="w-4 h-4" />
+          {/* Printer */}
+          <button
+            onClick={connectPrinter}
+            title={printerOk ? 'Impressora conectada' : 'Conectar impressora térmica'}
+            className="flex items-center justify-center w-8 h-8 rounded transition-colors hover:bg-white/10"
+            style={{ color: printerOk ? XERO.success : 'rgba(255,255,255,0.5)' }}
+          >
+            <Printer className="w-3.5 h-3.5" />
           </button>
 
+          {/* Refresh */}
+          <button
+            onClick={loadData}
+            title="Actualizar (F5)"
+            className="flex items-center justify-center w-8 h-8 rounded text-white/50 hover:text-white hover:bg-white/10 transition-colors"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+          </button>
+
+          {/* Close session */}
           {session && (
-            <button onClick={closeSession} className="flex items-center gap-1.5 text-xs text-white/60 hover:text-red-400 hover:bg-red-400/10 px-2.5 py-1.5 rounded-lg transition-colors">
-              <LogOut className="w-3.5 h-3.5" />
-              Fechar Caixa
+            <button
+              onClick={closeSession}
+              className="flex items-center gap-1 text-[11px] px-2.5 py-1.5 rounded-lg font-semibold text-white/50 hover:text-red-400 hover:bg-white/10 transition-colors ml-1"
+            >
+              <LogOut className="w-3 h-3" />
+              <span className="hidden sm:block">Fechar Caixa</span>
             </button>
           )}
         </div>
       </header>
 
-      {/* ── MAIN AREA ─────────────────────────────────────────────────────── */}
+      {/* ── BODY ──────────────────────────────────────────────────────────── */}
       <div className="flex flex-1 min-h-0">
 
-        {/* LEFT — Products ─────────────────────────────────────────────── */}
-        <div className="flex flex-col flex-1 min-w-0 border-r border-white/5">
+        {/* LEFT — Products */}
+        <div className="flex flex-col flex-1 min-w-0 border-r" style={{ borderColor: XERO.border }}>
 
-          {/* Search */}
-          <div className="px-3 py-2.5 bg-[#0a1628] border-b border-white/5 shrink-0">
+          {/* Search + Barcode */}
+          <div className="px-3 py-2 border-b shrink-0" style={{ background: XERO.card, borderColor: XERO.border }}>
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: XERO.muted }} />
+              <Scan className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5" style={{ color: XERO.cyan }} />
               <input
                 ref={searchRef}
                 type="text"
                 value={search}
                 onChange={e => onSearchChange(e.target.value)}
                 placeholder="Pesquisar produto, SKU ou código de barras… (F2)"
-                className="w-full bg-white/5 border border-white/10 rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-sky-500/50 focus:bg-white/8"
+                className="w-full rounded-lg border pl-9 pr-9 py-2 text-sm focus:outline-none transition-colors"
+                style={{
+                  borderColor: search ? XERO.cyan : XERO.border,
+                  background: XERO.bg,
+                  color: XERO.text,
+                }}
               />
               {search && (
-                <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white">
-                  <X className="w-4 h-4" />
+                <button
+                  onClick={() => setSearch('')}
+                  className="absolute right-8 top-1/2 -translate-y-1/2"
+                  style={{ color: XERO.muted }}
+                >
+                  <X className="w-3.5 h-3.5" />
                 </button>
               )}
             </div>
           </div>
 
           {/* Category tabs */}
-          <div className="flex gap-2 px-3 py-2 bg-[#080f1e] border-b border-white/5 shrink-0 overflow-x-auto scrollbar-none">
+          <div
+            className="flex gap-1.5 px-3 py-2 border-b shrink-0 overflow-x-auto scrollbar-none"
+            style={{ background: XERO.card, borderColor: XERO.border }}
+          >
             {['Todos', ...categories].map(cat => (
-              <button key={cat} onClick={() => setActiveCategory(cat)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
-                  activeCategory === cat
-                    ? 'bg-sky-600 text-white'
-                    : 'bg-white/5 text-white/50 hover:bg-white/10 hover:text-white'
-                }`}>
-                {CATEGORIES_EMOJI[cat] && <span>{CATEGORIES_EMOJI[cat]}</span>}
+              <button
+                key={cat}
+                onClick={() => setActiveCategory(cat)}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap transition-all border"
+                style={{
+                  background: activeCategory === cat ? XERO.cyan : 'transparent',
+                  borderColor: activeCategory === cat ? XERO.cyan : XERO.border,
+                  color: activeCategory === cat ? '#fff' : XERO.muted,
+                }}
+              >
+                {CAT_EMOJI[cat] && <span>{CAT_EMOJI[cat]}</span>}
                 {cat}
-                {cat === 'Todos' && <span className="text-[10px] opacity-60">({products.length})</span>}
+                {cat === 'Todos' && <span className="opacity-60">({products.length})</span>}
               </button>
             ))}
           </div>
 
           {/* Product grid */}
-          <div className="flex-1 overflow-y-auto p-3">
+          <div
+            className="flex-1 overflow-y-auto p-3 overscroll-contain"
+            style={{ background: XERO.bg }}
+          >
             {filtered.length === 0
-              ? <div className="flex flex-col items-center justify-center h-48 text-white/30">
-                  <Package className="w-10 h-10 mb-2" />
-                  <p className="text-sm">Nenhum produto encontrado</p>
+              ? (
+                <div className="flex flex-col items-center justify-center h-48" style={{ color: XERO.muted }}>
+                  <Package className="w-10 h-10 mb-2 opacity-30" />
+                  <p className="text-sm">
+                    {search ? `Sem resultados para "${search}"` : 'Nenhum produto disponível'}
+                  </p>
+                  {search && (
+                    <button onClick={() => setSearch('')} className="mt-2 text-xs font-medium hover:underline" style={{ color: XERO.cyan }}>
+                      Limpar pesquisa
+                    </button>
+                  )}
                 </div>
-              : <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
+              )
+              : (
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-2">
                   {filtered.map(p => (
                     <ProductCard key={p.id} product={p} onAdd={addToCart} />
                   ))}
                 </div>
+              )
             }
           </div>
 
-          {/* Keyboard shortcuts bar */}
-          <div className="flex items-center gap-4 px-3 py-2 bg-[#0a1628] border-t border-white/5 text-[10px] text-white/30 shrink-0">
-            <span><kbd className="bg-white/10 px-1 rounded">F2</kbd> Pesquisar</span>
-            <span><kbd className="bg-white/10 px-1 rounded">F4</kbd> Cobrar</span>
-            <span><kbd className="bg-white/10 px-1 rounded">F5</kbd> Limpar</span>
-            <span><kbd className="bg-white/10 px-1 rounded">ESC</kbd> Fechar</span>
+          {/* Shortcuts bar */}
+          <div
+            className="flex items-center gap-4 px-3 py-1.5 border-t text-[10px] shrink-0 overflow-x-auto scrollbar-none"
+            style={{ background: XERO.card, borderColor: XERO.border, color: XERO.muted }}
+          >
+            {[['F2','Pesquisar'],['F4','Cobrar'],['F5','Limpar'],['F9','Reimprimir'],['ESC','Fechar']].map(([k,l]) => (
+              <span key={k} className="flex items-center gap-1 whitespace-nowrap">
+                <kbd className="px-1.5 py-0.5 rounded text-[9px] font-mono border" style={{ borderColor: XERO.border, background: XERO.bg }}>
+                  {k}
+                </kbd>
+                {l}
+              </span>
+            ))}
+            <div className="flex-1" />
+            {lastSale && (
+              <button
+                onClick={() => handlePrint(lastSale)}
+                className="flex items-center gap-1 font-semibold hover:underline"
+                style={{ color: XERO.cyan }}
+              >
+                <Printer className="w-3 h-3" />
+                Reimprimir
+              </button>
+            )}
           </div>
         </div>
 
-        {/* RIGHT — Cart ─────────────────────────────────────────────────── */}
-        <div className="flex flex-col w-[340px] lg:w-[400px] shrink-0">
+        {/* RIGHT — Cart */}
+        <div
+          className="flex flex-col w-[300px] sm:w-[340px] lg:w-[380px] shrink-0"
+          style={{ background: XERO.card }}
+        >
 
           {/* Cart header */}
-          <div className="flex items-center justify-between px-4 py-3 bg-[#0a1628] border-b border-white/5 shrink-0">
-            <div className="flex items-center gap-2">
-              <ShoppingCart className="w-4 h-4 text-sky-400" />
-              <span className="font-semibold text-sm">Carrinho</span>
+          <div
+            className="flex items-center justify-between px-4 py-3 border-b shrink-0"
+            style={{ borderColor: XERO.border, background: XERO.navy }}
+          >
+            <div className="flex items-center gap-2 text-white">
+              <ShoppingCart className="w-4 h-4" style={{ color: XERO.cyan }} />
+              <span className="font-bold text-sm">Carrinho</span>
               {cart.length > 0 && (
-                <span className="bg-sky-600 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">
+                <span
+                  className="text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center"
+                  style={{ background: XERO.cyan, color: '#fff' }}
+                >
                   {totals.items}
                 </span>
               )}
             </div>
             {cart.length > 0 && (
-              <button onClick={() => setCart([])} className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300 hover:bg-red-400/10 px-2 py-1 rounded-lg transition-colors">
+              <button
+                onClick={() => setCart([])}
+                className="flex items-center gap-1 text-[11px] font-semibold hover:opacity-80 transition-opacity"
+                style={{ color: XERO.danger + 'cc' }}
+              >
                 <Trash2 className="w-3 h-3" />
                 Limpar
               </button>
@@ -753,64 +998,78 @@ export default function POSView() {
           </div>
 
           {/* Cart items */}
-          <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1.5">
+          <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1.5 overscroll-contain" style={{ background: XERO.bg }}>
             {cart.length === 0
-              ? <div className="flex flex-col items-center justify-center h-full text-white/20 py-12">
-                  <ShoppingCart className="w-12 h-12 mb-3" />
-                  <p className="text-sm">Carrinho vazio</p>
-                  <p className="text-xs mt-1">Clique num produto para adicionar</p>
+              ? (
+                <div className="flex flex-col items-center justify-center h-full py-10" style={{ color: XERO.muted }}>
+                  <ShoppingCart className="w-12 h-12 mb-3 opacity-20" />
+                  <p className="text-sm font-medium">Carrinho vazio</p>
+                  <p className="text-xs mt-1 opacity-60">Toque num produto para adicionar</p>
                 </div>
+              )
               : cart.map(item => (
-                  <CartItemRow key={item.product_id} item={item}
-                    onQtyChange={changeQty}
-                    onRemove={removeFromCart}
-                    onDiscount={id => setShowDiscount(id)}
-                  />
-                ))
+                <CartItemRow
+                  key={item.product_id} item={item}
+                  onQtyChange={changeQty}
+                  onRemove={removeFromCart}
+                  onDiscount={id => setShowDiscount(id)}
+                />
+              ))
             }
           </div>
 
           {/* Totals */}
-          <div className="px-4 py-3 bg-[#0a1628] border-t border-white/5 space-y-1.5 shrink-0">
-            <div className="flex justify-between text-sm text-white/60">
-              <span>Subtotal</span>
-              <span className="tabular-nums">{kz(totals.subtotal)}</span>
+          <div className="px-4 py-3 border-t space-y-1.5 shrink-0" style={{ borderColor: XERO.border, background: XERO.card }}>
+            <div className="flex justify-between text-xs" style={{ color: XERO.muted }}>
+              <span>{totals.items} artigo{totals.items !== 1 ? 's' : ''}</span>
+              <span className="tabular-nums">Subtotal: {kz(totals.subtotal)}</span>
             </div>
-            <div className="flex justify-between text-sm text-white/60">
-              <span>IVA (14%)</span>
+            <div className="flex justify-between text-xs" style={{ color: XERO.muted }}>
+              <span>IVA 14%</span>
               <span className="tabular-nums">{kz(totals.tax)}</span>
             </div>
-            <div className="flex justify-between text-lg font-black text-white border-t border-white/10 pt-2 mt-2">
+            <div
+              className="flex justify-between text-xl font-black border-t pt-2"
+              style={{ borderColor: XERO.border, color: XERO.text }}
+            >
               <span>TOTAL</span>
-              <span className="tabular-nums text-sky-400">{kz(totals.total)}</span>
+              <span className="tabular-nums" style={{ color: XERO.cyan }}>{kz(totals.total)}</span>
             </div>
           </div>
 
-          {/* Payment method quick selector */}
-          <div className="grid grid-cols-4 gap-1.5 px-3 py-2 bg-[#080f1e] border-t border-white/5 shrink-0">
+          {/* Payment method */}
+          <div
+            className="grid grid-cols-4 gap-1.5 px-3 py-2 border-t shrink-0"
+            style={{ borderColor: XERO.border, background: XERO.bg }}
+          >
             {(['Dinheiro', 'Multicaixa', 'TPA', 'Crédito'] as PaymentMethod[]).map(m => (
-              <button key={m} onClick={() => setPaymentMethod(m)}
-                className={`flex flex-col items-center gap-0.5 py-2 rounded-lg text-[10px] font-semibold transition-all ${
-                  paymentMethod === m
-                    ? 'bg-sky-600/30 border border-sky-500/50 text-sky-300'
-                    : 'bg-white/5 border border-transparent text-white/40 hover:text-white hover:bg-white/10'
-                }`}>
-                {PAYMENT_ICONS[m]}
-                <span>{m}</span>
+              <button
+                key={m}
+                onClick={() => setPaymentMethod(m)}
+                className="flex flex-col items-center gap-1 py-2 rounded-lg border text-[10px] font-bold transition-all active:scale-95"
+                style={{
+                  borderColor: paymentMethod === m ? XERO.cyan : XERO.border,
+                  background: paymentMethod === m ? XERO.cyan + '12' : XERO.card,
+                  color: paymentMethod === m ? XERO.cyan : XERO.muted,
+                }}
+              >
+                {PAY_ICONS[m]}
+                {m}
               </button>
             ))}
           </div>
 
-          {/* COBRAR button */}
-          <div className="px-3 pb-3 pt-2 bg-[#080f1e] shrink-0">
+          {/* COBRAR */}
+          <div className="px-3 pb-3 pt-2 shrink-0" style={{ background: XERO.bg }}>
             <button
               onClick={() => { if (cart.length > 0) setShowPayment(true); }}
               disabled={cart.length === 0 || processing}
-              className="w-full py-4 rounded-2xl bg-gradient-to-r from-sky-700 to-sky-500 hover:from-sky-600 hover:to-sky-400 text-white font-black text-xl tracking-wide transition-all disabled:opacity-30 disabled:cursor-not-allowed active:scale-98 shadow-lg shadow-sky-900/30 flex items-center justify-center gap-2"
+              className="w-full py-4 rounded-xl font-black text-xl text-white tracking-wide transition-all active:scale-[0.98] disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg"
+              style={{ background: cart.length > 0 ? XERO.cyan : XERO.muted }}
             >
               <Receipt className="w-5 h-5" />
               COBRAR
-              <span className="text-base font-semibold opacity-80">F4</span>
+              <span className="text-sm font-semibold opacity-60">F4</span>
             </button>
           </div>
         </div>
@@ -819,19 +1078,14 @@ export default function POSView() {
       {/* ── MODALS ──────────────────────────────────────────────────────────── */}
       {showPayment && (
         <PaymentModal
-          total={totals.total}
-          method={paymentMethod}
+          total={totals.total} method={paymentMethod}
           onMethodChange={setPaymentMethod}
           onConfirm={handleCheckout}
           onClose={() => setShowPayment(false)}
           processing={processing}
         />
       )}
-
-      {showSession && (
-        <SessionModal onOpen={openSession} onClose={() => setShowSession(false)} />
-      )}
-
+      {showSession && <SessionModal onOpen={openSession} onClose={() => setShowSession(false)} />}
       {showDiscount && (
         <DiscountModal
           productId={showDiscount}
@@ -840,6 +1094,7 @@ export default function POSView() {
           onClose={() => setShowDiscount(null)}
         />
       )}
+      {lastSale && <SuccessOverlay sale={lastSale} onClose={() => setLastSale(null)} />}
     </div>
   );
 }
