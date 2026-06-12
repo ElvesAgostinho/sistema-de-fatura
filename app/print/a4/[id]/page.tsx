@@ -16,7 +16,7 @@ function fmtDate(d: any) {
   return new Date(d).toLocaleDateString('pt-AO', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
-export default async function A4PrintPage({ params }: { params: { id: string } }) {
+export default async function A4PrintPage({ params, searchParams }: { params: { id: string }, searchParams?: { via?: string } }) {
   const admin = createAdminClient();
 
   const { data: invoice } = await admin
@@ -42,6 +42,7 @@ export default async function A4PrintPage({ params }: { params: { id: string } }
     ND: 'NOTA DE DÉBITO', RC: 'RECIBO', PP: 'FATURA PRÓ-FORMA', GT: 'GUIA DE TRANSPORTE',
   };
   const docLabel = DOC_LABELS[invoice.document_type] ?? invoice.document_type;
+  const viaLabel = searchParams?.via === '2' ? '2ª Via em conformidade com o original' : 'Original';
   const primaryColor = company.invoice_primary_color || '#2563eb';
 
   // QR Code
@@ -80,6 +81,49 @@ export default async function A4PrintPage({ params }: { params: { id: string } }
   const dueDate = invoice.due_date
     ? new Date(invoice.due_date).toLocaleDateString('pt-AO', { day: '2-digit', month: '2-digit', year: 'numeric' })
     : '';
+
+  // Tax Summary Calculation
+  const taxGroups = new Map<string, { rate: number; reason: string; base: number; tax: number }>();
+  for (const it of items) {
+    const rate = Number(it.tax_rate ?? 14);
+    const reason = rate === 0 ? (it.tax_exemption_reason || invoice.tax_exemption_reason || 'Isento nos termos gerais') : '';
+    const key = rate === 0 ? `0|${reason}` : `${rate}|`;
+    const lineTotal = Number(it.total ?? 0);
+    const sub = lineTotal / (1 + rate / 100);
+    const taxAmt = lineTotal - sub;
+
+    if (!taxGroups.has(key)) {
+      taxGroups.set(key, { rate, reason, base: 0, tax: 0 });
+    }
+    const group = taxGroups.get(key)!;
+    group.base += sub;
+    group.tax += taxAmt;
+  }
+  const taxRowsHtml = Array.from(taxGroups.values()).map(g => `
+    <tr>
+      <td style="padding:6px 12px;border-bottom:1px solid #f3f4f6;">${g.rate}%</td>
+      <td style="padding:6px 12px;border-bottom:1px solid #f3f4f6;text-align:right;">${fmtAOA(g.base)}</td>
+      <td style="padding:6px 12px;border-bottom:1px solid #f3f4f6;text-align:right;">${fmtAOA(g.tax)}</td>
+      <td style="padding:6px 12px;border-bottom:1px solid #f3f4f6;font-size:10px;">${esc(g.reason)}</td>
+    </tr>
+  `).join('');
+
+  const taxSummaryHtml = `
+    <div class="no-break" style="margin-top:20px;margin-bottom:20px;">
+      <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;color:#6b7280;margin-bottom:6px;">Quadro Resumo de Impostos</div>
+      <table style="width:100%;font-size:11px;border:1px solid #e5e7eb;">
+        <thead>
+          <tr style="background:#f9fafb;border-bottom:1px solid #e5e7eb;">
+            <th style="padding:6px 12px;text-align:left;color:#6b7280;font-weight:600;">Taxa</th>
+            <th style="padding:6px 12px;text-align:right;color:#6b7280;font-weight:600;">Incidência</th>
+            <th style="padding:6px 12px;text-align:right;color:#6b7280;font-weight:600;">Imposto</th>
+            <th style="padding:6px 12px;text-align:left;color:#6b7280;font-weight:600;">Motivo Isenção</th>
+          </tr>
+        </thead>
+        <tbody>${taxRowsHtml}</tbody>
+      </table>
+    </div>
+  `;
 
   // Item rows
   const rows = items.map((it: any, i: number) => `
@@ -121,6 +165,7 @@ ${cancelled ? '<div class="wm-cancelled">CANCELADA</div>' : ''}
       </div>
     </div>
     <div style="flex-shrink:0;min-width:200px;text-align:right;">
+      <div style="font-size:11px;color:#6b7280;margin-bottom:4px;font-weight:600;">${viaLabel}</div>
       <div style="font-size:22px;font-weight:800;color:${primaryColor};letter-spacing:-.3px;">${docLabel}</div>
       <div style="font-size:15px;font-weight:600;color:#374151;margin-top:3px;">${esc(invoice.invoice_number)}</div>
       <div style="margin-top:6px;">
@@ -200,6 +245,8 @@ ${cancelled ? `<div class="no-break" style="background:#fee2e2;border-left:3px s
     </div>
   </div>
 </div>
+
+${taxSummaryHtml}
 
 <!-- RODAPÉ AGT -->
 <div class="no-break" style="margin-top:20px;">

@@ -5,7 +5,10 @@ import { buildInvoiceHtml, generateInvoicePdfBuffer } from '@/lib/invoice-pdf';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(_: Request, { params }: { params: { id: string } }) {
+export async function GET(req: Request, { params }: { params: { id: string } }) {
+  const { searchParams } = new URL(req.url);
+  const viaParam = searchParams.get('via');
+  const viaLabel = viaParam === '2' ? '2ª Via em conformidade com o original' : 'Original';
   const ctx = await getCurrentUserContext();
   if (!ctx?.profile) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -30,7 +33,7 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
     .select('mode, agt_certificado_numero').eq('company_id', ctx.profile.company_id).maybeSingle();
 
   try {
-    const html = await buildInvoiceHtml(enriched, items, company, fcfg);
+    const html = await buildInvoiceHtml(enriched, items, company, fcfg, viaLabel);
     const buf = await generateInvoicePdfBuffer(html);
     return new NextResponse(buf, {
       headers: {

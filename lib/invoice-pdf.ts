@@ -15,7 +15,7 @@ function esc(s: any): string {
  *  - Marca de água CANCELADA diagonal
  *  - QR Code e rodapé AGT compactos
  */
-export async function buildInvoiceHtml(inv: any, items: any[], company: any, fcfg: any): Promise<string> {
+export async function buildInvoiceHtml(inv: any, items: any[], company: any, fcfg: any, viaLabel: string = 'Original'): Promise<string> {
   /* ── AGT footer ── */
   const certifiedFooter = fcfg?.mode === 'certificado' && fcfg?.agt_certificado_numero
     ? `Processado por programa certificado n&ordm; ${esc(fcfg.agt_certificado_numero)} &bull; FaturaAO`
@@ -86,6 +86,49 @@ export async function buildInvoiceHtml(inv: any, items: any[], company: any, fcf
       <td style="padding:10px 12px;font-size:11.5px;text-align:center;border-bottom:1px solid #f3f4f6;color:#6b7280;">${Number(it.tax_rate).toFixed(0)}%</td>
       <td style="padding:10px 12px;font-size:11.5px;text-align:right;font-weight:600;border-bottom:1px solid #f3f4f6;white-space:nowrap;">${formatAOA(it.total)}</td>
     </tr>`).join('');
+
+  /* ── Tax Summary Calculation ── */
+  const taxGroups = new Map<string, { rate: number; reason: string; base: number; tax: number }>();
+  for (const it of items) {
+    const rate = Number(it.tax_rate ?? 14);
+    const reason = rate === 0 ? (it.tax_exemption_reason || inv.tax_exemption_reason || 'Isento nos termos gerais') : '';
+    const key = rate === 0 ? `0|${reason}` : `${rate}|`;
+    const lineTotal = Number(it.total ?? 0);
+    const sub = lineTotal / (1 + rate / 100);
+    const taxAmt = lineTotal - sub;
+
+    if (!taxGroups.has(key)) {
+      taxGroups.set(key, { rate, reason, base: 0, tax: 0 });
+    }
+    const group = taxGroups.get(key)!;
+    group.base += sub;
+    group.tax += taxAmt;
+  }
+  const taxRowsHtml = Array.from(taxGroups.values()).map(g => `
+    <tr>
+      <td style="padding:6px 12px;border-bottom:1px solid #f3f4f6;">${g.rate}%</td>
+      <td style="padding:6px 12px;border-bottom:1px solid #f3f4f6;text-align:right;">${formatAOA(g.base)}</td>
+      <td style="padding:6px 12px;border-bottom:1px solid #f3f4f6;text-align:right;">${formatAOA(g.tax)}</td>
+      <td style="padding:6px 12px;border-bottom:1px solid #f3f4f6;font-size:10px;">${esc(g.reason)}</td>
+    </tr>
+  `).join('');
+
+  const taxSummaryHtml = `
+    <div class="no-break" style="margin-top:20px;margin-bottom:20px;">
+      <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;color:#6b7280;margin-bottom:6px;">Quadro Resumo de Impostos</div>
+      <table style="width:100%;font-size:11px;border:1px solid #e5e7eb;">
+        <thead>
+          <tr style="background:#f9fafb;border-bottom:1px solid #e5e7eb;">
+            <th style="padding:6px 12px;text-align:left;color:#6b7280;font-weight:600;">Taxa</th>
+            <th style="padding:6px 12px;text-align:right;color:#6b7280;font-weight:600;">Incidência</th>
+            <th style="padding:6px 12px;text-align:right;color:#6b7280;font-weight:600;">Imposto</th>
+            <th style="padding:6px 12px;text-align:left;color:#6b7280;font-weight:600;">Motivo Isenção</th>
+          </tr>
+        </thead>
+        <tbody>${taxRowsHtml}</tbody>
+      </table>
+    </div>
+  `;
 
   /* ── QR Code ── */
   const qrPayload = [company?.nif??'', inv.client_nif??'', inv.invoice_number??'',
@@ -200,6 +243,7 @@ ${/* ════ CABEÇALHO — estilo Xero ════ */''}
     ${/* Documento: direita */''}
     <div style="flex-shrink:0;min-width:200px;">
       ${logoRightHtml}
+      <div style="font-size:11px;color:#6b7280;margin-bottom:4px;font-weight:600;text-align:right;">${viaLabel}</div>
       <div class="doc-type-label">${docLabel}</div>
       <div class="doc-number">${esc(inv.invoice_number)}</div>
       <div style="margin-top:6px;text-align:right;">
@@ -283,6 +327,8 @@ ${/* ════ TOTAIS + QR — nunca parte de página ════ */''}
 
   </div>
 </div>
+
+${taxSummaryHtml}
 
 ${/* ════ RODAPÉ AGT compacto ════ */''}
 <div class="no-break" style="margin-top:20px;">
