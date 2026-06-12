@@ -95,8 +95,8 @@ export async function buildInvoiceHtml(inv: any, items: any[], company: any, fcf
   let qrDataUrl = '';
   try { qrDataUrl = await QRCode.toDataURL(qrPayload, { width:96, margin:1, errorCorrectionLevel:'M' }); } catch {}
 
-  /* ── Hash (compact) ── */
-  const hashShort = inv.hash ? `${String(inv.hash).slice(0,12)}\u2026${String(inv.hash).slice(-8)}` : '';
+  /* 🔒 Hash (compact) */
+  const hashShort = inv.hash ? String(inv.hash).slice(0, 4).toUpperCase() : '';
 
   return `<!DOCTYPE html>
 <html lang="pt-AO"><head><meta charset="utf-8"/>

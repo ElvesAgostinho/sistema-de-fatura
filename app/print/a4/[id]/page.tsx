@@ -73,7 +73,7 @@ export default async function A4PrintPage({ params }: { params: { id: string } }
     : 'Processado por FaturaAO · Em conformidade com AGT';
 
   const hashShort = invoice.hash
-    ? `${String(invoice.hash).slice(0, 12)}…${String(invoice.hash).slice(-8)}`
+    ? String(invoice.hash).slice(0, 4).toUpperCase()
     : '';
 
   // Due date
