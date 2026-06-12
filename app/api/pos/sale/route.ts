@@ -161,60 +161,49 @@ export async function POST(req: Request) {
 
     if (!invoice) return ApiResponse.error('Falha ao gerar documento (conflito de numeração)');
 
-    // ── Items + Stock + Payment in parallel ──────────────────────────────
+    // ── Pre-validate stock BEFORE committing items ────────────────────────
+    // Prevents overselling — check happens before any DB writes for items
     const productIds = cleanItems.map(c => c.product_id).filter(Boolean);
-    const { data: products } = productIds.length > 0
-      ? await admin.from('products').select('id, quantity_in_stock, track_stock').in('id', productIds)
-      : { data: [] };
-    const productMap = new Map((products ?? []).map(p => [p.id, p]));
+    if (productIds.length > 0) {
+      const { data: products } = await admin.from('products')
+        .select('id, name, quantity_in_stock, track_stock')
+        .in('id', productIds);
+      const productMap = new Map((products ?? []).map(p => [p.id, p]));
 
-    const itemsToInsert = cleanItems.map(c => ({ ...c, invoice_id: invoice.id }));
-    const stockMovements: any[] = [];
-    const stockUpdates: Promise<any>[] = [];
-
-    for (const item of cleanItems) {
-      const p = item.product_id ? productMap.get(item.product_id) : null;
-      if (p?.track_stock) {
-        const newQty = Number(p.quantity_in_stock ?? 0) - item.quantity;
-        stockUpdates.push(
-          Promise.resolve(
-            admin.from('products').update({ quantity_in_stock: newQty }).eq('id', p.id)
-          )
-        );
-        stockMovements.push({
-          company_id: companyId, product_id: p.id, invoice_id: invoice.id,
-          movement_type: 'venda', quantity: -item.quantity, balance_after: newQty,
-          notes: `POS ${invoice.invoice_number}`,
-        });
+      for (const item of cleanItems) {
+        if (!item.product_id) continue;
+        const p = productMap.get(item.product_id);
+        if (p?.track_stock && (p.quantity_in_stock ?? 0) < item.quantity) {
+          // Rollback: mark invoice as cancelled if stock insufficient
+          await admin.from('invoices').update({ status: 'cancelled', cancellation_reason: 'Stock insuficiente (validação POS)' }).eq('id', invoice.id);
+          return ApiResponse.error(`Stock insuficiente: ${p.name ?? item.product_id} (disponível: ${p.quantity_in_stock ?? 0}, pedido: ${item.quantity})`);
+        }
       }
     }
 
-    await Promise.all([
-      admin.from('invoice_items').insert(itemsToInsert),
-      admin.from('payments').insert({
-        company_id: companyId, invoice_id: invoice.id, amount: total,
-        payment_date: invoice.issued_at,
-        method: payment_method ?? 'Dinheiro',
-        created_by: ctx.user.id,
-        notes: `POS ${invoice.invoice_number}${notes ? ' · ' + notes : ''}`,
-      }),
-      stockMovements.length > 0 ? admin.from('stock_movements').insert(stockMovements) : Promise.resolve(),
-      ...stockUpdates,
-    ]);
+    // ── Atomic: items + payment + stock in ONE transaction ────────────────
+    // Uses stored procedure process_pos_sale() — all or nothing (ACID)
+    const { error: rpcErr } = await admin.rpc('process_pos_sale', {
+      p_company_id:      companyId,
+      p_invoice_id:      invoice.id,
+      p_items:           JSON.stringify(cleanItems),
+      p_payment_amount:  total,
+      p_payment_method:  payment_method ?? 'Dinheiro',
+      p_session_id:      session_id ?? null,
+      p_user_id:         ctx.user.id,
+      p_invoice_number:  invoice.invoice_number,
+    });
 
-    // ── Update POS session totals (fire-and-forget) ─────────────────────
-    if (session_id) {
-      const colMap: Record<string, string> = {
-        'Dinheiro': 'total_cash', 'Multicaixa': 'total_multicaixa',
-        'TPA': 'total_tpa', 'Crédito': 'total_credit',
-      };
-      const col = colMap[payment_method] ?? 'total_cash';
-      void admin.rpc('increment_pos_session', {
-        p_session_id: session_id, p_total: total, p_col: col,
-      });
+    if (rpcErr) {
+      // Rollback invoice if atomic operation failed
+      await admin.from('invoices').update({
+        status: 'cancelled',
+        cancellation_reason: `Falha transacção POS: ${rpcErr.message}`,
+      }).eq('id', invoice.id);
+      return ApiResponse.error(`Erro ao processar venda: ${rpcErr.message}`);
     }
 
-    // ── Audit + Cache invalidation ───────────────────────────────
+    // ── Audit + Cache invalidation ────────────────────────────────────────
     void admin.from('audit_logs').insert({
       user_id: ctx.user.id, company_id: companyId,
       action: 'pos.sale', entity: 'invoice', entity_id: invoice.id,
