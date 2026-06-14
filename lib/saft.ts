@@ -410,12 +410,14 @@ ${taxTable}
     const itemLines = (inv.items || []).map((it, idx) => {
       const key = String(it.description || '').trim().toLowerCase();
       const prodCode = productMap.get(key)?.code ?? slugCode(it.description);
+      const qtyNum = Number(it.quantity);
+      const priceNum = Number(it.price);
+      const discountAmt = Number(it.discount || 0);
       const rate = Number(it.tax_rate);
       const taxCode = rate === 0 ? 'ISE' : 'NOR';
-      const lineTotal = Number(it.total);
-      const lineSub = +(lineTotal / (1 + rate / 100)).toFixed(2);
-      // FIX: TaxAmount em AOA por linha (obrigatório AGT)
-      const taxAmount = +(lineTotal - lineSub).toFixed(2);
+      
+      const lineNet = +(qtyNum * priceNum - discountAmt).toFixed(2);
+      const taxAmount = +(lineNet * (rate / 100)).toFixed(2);
 
       // FIX: TaxExemptionCode — usar códigos legais M01-M19 em vez de M99
       const exemptionInfo = rate === 0
@@ -444,7 +446,7 @@ ${taxTable}
           <UnitPrice>${money(it.price)}</UnitPrice>${lineReferences}
           <TaxPointDate>${isoDate(inv.issued_at)}</TaxPointDate>
           <Description>${esc(it.description)}</Description>
-          <${amountTag}>${money(it.total)}</${amountTag}>${Number(it.discount) > 0 ? `\n          <SettlementAmount>${money(it.discount)}</SettlementAmount>` : ''}
+          <${amountTag}>${money(lineNet)}</${amountTag}>${discountAmt > 0 ? `\n          <SettlementAmount>${money(discountAmt)}</SettlementAmount>` : ''}
           <Tax>
             <TaxType>IVA</TaxType>
             <TaxCountryRegion>AO</TaxCountryRegion>
@@ -506,11 +508,14 @@ ${itemLines}
     const itemLines = (inv.items || []).map((it, idx) => {
       const key = String(it.description || '').trim().toLowerCase();
       const prodCode = productMap.get(key)?.code ?? slugCode(it.description);
+      const qtyNum = Number(it.quantity);
+      const priceNum = Number(it.price);
+      const discountAmt = Number(it.discount || 0);
       const rate = Number(it.tax_rate);
       const taxCode = rate === 0 ? 'ISE' : 'NOR';
-      const lineTotal = Number(it.total);
-      const lineSub = +(lineTotal / (1 + rate / 100)).toFixed(2);
-      const taxAmount = +(lineTotal - lineSub).toFixed(2);
+      
+      const lineNet = +(qtyNum * priceNum - discountAmt).toFixed(2);
+      const taxAmount = +(lineNet * (rate / 100)).toFixed(2);
 
       const exemptionInfo = rate === 0 ? getExemptionInfo(it.tax_exemption_reason || inv.tax_exemption_reason) : null;
       const exemption = exemptionInfo
@@ -527,7 +532,7 @@ ${itemLines}
           <UnitPrice>${money(it.price)}</UnitPrice>
           <TaxPointDate>${isoDate(inv.issued_at)}</TaxPointDate>
           <Description>${esc(it.description)}</Description>
-          <CreditAmount>${money(it.total)}</CreditAmount>${Number(it.discount) > 0 ? `\n          <SettlementAmount>${money(it.discount)}</SettlementAmount>` : ''}
+          <CreditAmount>${money(lineNet)}</CreditAmount>${discountAmt > 0 ? `\n          <SettlementAmount>${money(discountAmt)}</SettlementAmount>` : ''}
           <Tax>
             <TaxType>IVA</TaxType>
             <TaxCountryRegion>AO</TaxCountryRegion>
