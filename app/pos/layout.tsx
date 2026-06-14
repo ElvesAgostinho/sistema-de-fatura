@@ -24,5 +24,5 @@ export default async function POSRootLayout({ children }: { children: React.Reac
   if (status === 'rejected') redirect('/rejected');
 
   // POS renders full-screen — no AppShell, no navbar, no sidebar
-  return children;
+  return <>{children}</>;
 }

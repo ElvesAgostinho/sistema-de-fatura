@@ -1420,6 +1420,7 @@ export default function POSView() {
   const [session,         setSession]         = useState<POSSession | null>(null);
   const [paymentMethod,   setPaymentMethod]   = useState<PaymentMethod>('Dinheiro');
   const [lastSale,        setLastSale]        = useState<any>(null);
+  const [showSuccess,     setShowSuccess]     = useState(false);
   const [clock,           setClock]           = useState(new Date());
   const [companyInfo,     setCompanyInfo]     = useState<any>(null);
   const [online,          setOnline]          = useState(true);
@@ -1726,6 +1727,7 @@ export default function POSView() {
       return;
     }
     vibrate(30);
+    setLastSale(null);
     setCart(prev => {
       const ex = prev.find(i => i.product_id === product.id);
       if (ex) return prev.map(i => i.product_id === product.id ? calcLine({ ...i, quantity: i.quantity + 1 }) : i);
@@ -1892,6 +1894,7 @@ export default function POSView() {
       const sale = j.invoice ?? j;
       const meta = { ...sale, paymentMethod, amountTendered, change: j.change ?? 0, items: snap };
       setLastSale(meta);
+      setShowSuccess(true);
       setCart([]);
       setShowPayment(false);
 
@@ -2271,7 +2274,7 @@ export default function POSView() {
           {/* Footer action bar */}
           <TouchActionBar
             touchMode={touchMode}
-            onNewSale={() => { setCart([]); searchRef.current?.focus(); }}
+            onNewSale={() => { setCart([]); setLastSale(null); searchRef.current?.focus(); }}
             onSuspend={suspendSale}
             onResume={resumeSale}
             suspendedCart={suspendedCart}
@@ -2467,7 +2470,7 @@ export default function POSView() {
           onClose={() => setShowDiscount(null)}
         />
       )}
-      {lastSale && <SuccessOverlay sale={lastSale} onClose={() => setLastSale(null)} />}
+      {showSuccess && lastSale && <SuccessOverlay sale={lastSale} onClose={() => setShowSuccess(false)} />}
 
       {showVoid && lastSale?.invoice_id && (
         <VoidSaleModal
