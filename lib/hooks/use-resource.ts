@@ -9,24 +9,10 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 
 const CACHE = new Map<string, { data: any; at: number }>();
 
-if (typeof window !== 'undefined') {
-  try {
-    const saved = localStorage.getItem('fatura_ao_cache');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      for (const [k, v] of Object.entries(parsed)) {
-        CACHE.set(k, v as any);
-      }
-    }
-  } catch {}
-}
-
+// Removed localStorage persistence for security.
+// Data should not leak between different users on the same device.
 function persistCache() {
-  if (typeof window === 'undefined') return;
-  try {
-    const obj = Object.fromEntries(CACHE.entries());
-    localStorage.setItem('fatura_ao_cache', JSON.stringify(obj));
-  } catch {}
+  // no-op
 }
 
 export function invalidateCache(url?: string) {
@@ -34,9 +20,10 @@ export function invalidateCache(url?: string) {
     CACHE.delete(url);
   } else {
     CACHE.clear();
-    if (typeof window !== 'undefined') localStorage.removeItem('fatura_ao_cache');
+    if (typeof window !== 'undefined') {
+      try { localStorage.removeItem('fatura_ao_cache'); } catch {}
+    }
   }
-  persistCache();
 }
 
 export async function prefetchResource(url: string, ttl = 60000) {
@@ -48,7 +35,6 @@ export async function prefetchResource(url: string, ttl = 60000) {
     if (r.ok) {
       const data = await r.json();
       CACHE.set(url, { data, at: Date.now() });
-      persistCache();
     }
   } catch {}
 }
@@ -126,9 +112,9 @@ export function useResource<T = any>(url: string | null, opts: any = {}) {
       const finalData = transform ? transform(raw) : raw;
 
       if (finalData !== null) {
-        CACHE.set(url, { data: finalData, at: Date.now() });
-        persistCache();
         setData(finalData);
+        CACHE.set(url, { data: finalData, at: Date.now() });
+        setValidating(false);
       }
       setError(null);
     } catch (err: any) {
