@@ -145,7 +145,7 @@ export default async function PosReceiptPrintPage({ params, searchParams }: { pa
                 <td style={{ paddingTop: '4px', paddingRight: '4px' }}>
                   <div>{item.description?.slice(0, 28)}</div>
                   <div style={{ color: '#555', fontSize: '9px' }}>
-                    {fmtAOA(item.price)} x {item.quantity} (IVA {item.tax_rate}%)
+                    {fmtAOA(item.price)} x {item.quantity} | Desc: {Number(item.discount_pct ?? 0).toFixed(2).replace('.', ',')}% (IVA {item.tax_rate}%)
                   </div>
                 </td>
                 <td style={{ paddingTop: '4px', textAlign: 'center' }}>{item.quantity}</td>

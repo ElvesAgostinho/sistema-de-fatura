@@ -132,6 +132,7 @@ export default async function A4PrintPage({ params, searchParams }: { params: { 
       <td style="padding:10px 12px;font-size:11.5px;border-bottom:1px solid #f3f4f6;">${esc(it.description)}</td>
       <td style="padding:10px 12px;font-size:11.5px;text-align:center;border-bottom:1px solid #f3f4f6;">${Number(it.quantity).toFixed(0)}</td>
       <td style="padding:10px 12px;font-size:11.5px;text-align:right;border-bottom:1px solid #f3f4f6;white-space:nowrap;">${fmtAOA(it.price)}</td>
+      <td style="padding:10px 12px;font-size:11.5px;text-align:right;border-bottom:1px solid #f3f4f6;color:#6b7280;">${Number(it.discount_pct ?? 0).toFixed(2).replace('.', ',')}%</td>
       <td style="padding:10px 12px;font-size:11.5px;text-align:center;border-bottom:1px solid #f3f4f6;color:#6b7280;">${Number(it.tax_rate ?? 14).toFixed(0)}%</td>
       <td style="padding:10px 12px;font-size:11.5px;text-align:right;font-weight:600;border-bottom:1px solid #f3f4f6;white-space:nowrap;">${fmtAOA(it.total)}</td>
     </tr>`).join('');
@@ -205,9 +206,10 @@ ${cancelled ? `<div class="no-break" style="background:#fee2e2;border-left:3px s
       <th style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#6b7280;padding:10px 12px;text-align:left;width:26px;">#</th>
       <th style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#6b7280;padding:10px 12px;text-align:left;">Artigo / Descrição</th>
       <th style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#6b7280;padding:10px 12px;text-align:center;width:44px;">Qtd</th>
-      <th style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#6b7280;padding:10px 12px;text-align:right;width:110px;">Preço Unit.</th>
+      <th style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#6b7280;padding:10px 12px;text-align:right;width:100px;">Preço Unit.</th>
+      <th style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#6b7280;padding:10px 12px;text-align:right;width:60px;">Desc%</th>
       <th style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#6b7280;padding:10px 12px;text-align:center;width:44px;">IVA</th>
-      <th style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#6b7280;padding:10px 12px;text-align:right;width:110px;">Total</th>
+      <th style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#6b7280;padding:10px 12px;text-align:right;width:100px;">Total</th>
     </tr>
   </thead>
   <tbody>${rows}</tbody>

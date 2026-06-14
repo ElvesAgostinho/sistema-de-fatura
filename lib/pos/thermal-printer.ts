@@ -199,7 +199,8 @@ export function buildReceiptCommands(data: ReceiptData): Uint8Array {
     if (item.sku) push(line(`[${item.sku}]`));
     push(line(item.name.slice(0, 32)));
     const taxNote = item.tax_rate != null ? ` (IVA ${item.tax_rate}%)` : '';
-    push(twoCol(`  ${item.qty}x ${fmt(item.price)}${taxNote}`, fmt(item.total)));
+    const descNote = ` | Desc: ${Number(item.discount_pct ?? 0).toFixed(2).replace('.', ',')}%`;
+    push(twoCol(`  ${item.qty}x ${fmt(item.price)}${descNote}${taxNote}`, fmt(item.total)));
   }
   push(divider());
 
