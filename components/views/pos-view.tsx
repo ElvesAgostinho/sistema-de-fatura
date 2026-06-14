@@ -1295,9 +1295,13 @@ export default function POSView() {
       const code = raw.trim();
       if (code.length < MIN_BARCODE_LEN) { barcodeBuffer.current = ''; barcodeKeyTimes.current = []; return; }
       const prods = productsRef.current;
-      const match = prods.find(
+      let match = prods.find(
         p => p.sku === code || (p as any).barcode === code
       );
+      if (!match) {
+        const lower = code.toLowerCase();
+        match = prods.find(p => p.name.toLowerCase().includes(lower));
+      }
       if (match) {
         if (isConsultingRef.current) {
           setConsultedProduct(match);
@@ -1988,7 +1992,7 @@ export default function POSView() {
                   <ProductCard
                     key={p.id}
                     product={p}
-                    onAdd={addToCart}
+                    onAdd={isConsulting ? (prod) => { setConsultedProduct(prod); setIsConsulting(false); setSearch(''); } : addToCart}
                     touchMode={touchMode}
                     isFavorite={favorites.includes(p.id)}
                     onFavorite={toggleFavorite}
