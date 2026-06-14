@@ -14,7 +14,7 @@ export const metadata: Metadata = {
   viewport: 'width=device-width, initial-scale=1, viewport-fit=cover',
 };
 
-export default async function POSRootLayout({ children }: { children: React.ReactNode }) {
+export default async function POSRootLayout({ children }: { children: React.ReactNode }): Promise<any> {
   const ctx = await getCurrentUserContext();
   if (!ctx?.user) redirect('/login');
   if (!ctx.profile) redirect('/login');

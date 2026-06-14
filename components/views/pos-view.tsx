@@ -11,7 +11,8 @@ import {
   Star, Pause, Play, Monitor, Tablet,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabase/client';
+import { createClient } from '@/lib/supabase/client';
+const supabase = createClient();
 import { ClipboardList } from 'lucide-react';
 import { useProfile } from '@/lib/hooks/use-profile';
 import type { POSProduct, POSCartItem, PaymentMethod, POSSession } from '@/lib/pos/types';
@@ -590,7 +591,7 @@ function ShiftHistoryModal({
 
       if (invoicesData) {
         setSales(invoicesData.slice(0, 10)); // Top 10
-        const total = invoicesData.reduce((acc, curr) => acc + (curr.total || 0), 0);
+        const total = invoicesData.reduce((acc: any, curr: any) => acc + (curr.total || 0), 0);
         const count = invoicesData.length;
         setStats(prev => ({
           ...prev,
@@ -1263,6 +1264,7 @@ function TouchActionBar({
   canPay,
   onPrint,
   lastSale,
+  onVoid,
 }: {
   touchMode: boolean;
   onNewSale: () => void;
@@ -1273,6 +1275,7 @@ function TouchActionBar({
   canPay: boolean;
   onPrint: () => void;
   lastSale: any;
+  onVoid: () => void;
 }) {
   const btnH = touchMode ? '52px' : '36px';
 
@@ -1314,7 +1317,7 @@ function TouchActionBar({
           key: 'F10',
           label: 'Anular Venda',
           icon: <AlertTriangle className={touchMode ? 'w-5 h-5' : 'w-3.5 h-3.5'} />,
-          onClick: () => setShowVoid(true),
+          onClick: onVoid,
           bg: XERO.danger,
           color: '#fff',
           border: 'transparent',
@@ -1413,6 +1416,7 @@ export default function POSView() {
   const [showSession,     setShowSession]     = useState(false);
   const [showDiscount,    setShowDiscount]    = useState<string | null>(null);
   const [showVoid,        setShowVoid]        = useState(false);
+  const [showHistory,     setShowHistory]     = useState(false);
   const [session,         setSession]         = useState<POSSession | null>(null);
   const [paymentMethod,   setPaymentMethod]   = useState<PaymentMethod>('Dinheiro');
   const [lastSale,        setLastSale]        = useState<any>(null);
@@ -1806,7 +1810,7 @@ export default function POSView() {
       documentType:   'FR',
       invoiceNumber:  sale.invoice_number ?? '',
       issuedAt:       sale.issued_at ?? new Date().toISOString(),
-      cashierName:    profile?.name || sale.cashierName || 'Operador',
+      cashierName:    (profile as any)?.name || sale.cashierName || 'Operador',
       terminalName:   session?.terminal_name,
       hash:           sale.hash,
       items: (sale.items ?? cart).map((i: any) => ({
@@ -2013,21 +2017,23 @@ export default function POSView() {
 
         {/* Session badge */}
         {session ? (
-          <span
-            className="flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-full ml-2"
-            style={{ background: `${XERO.success}20`, color: XERO.success, border: `1px solid ${XERO.success}40` }}
-          >
-            <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: XERO.success }} />
-            {session.terminal_name}
-          </span>
-          <button
-            onClick={() => setShowHistory(true)}
-            className="flex items-center gap-1.5 text-[11px] font-bold px-3 py-1 rounded-full ml-2 transition-opacity hover:opacity-80"
-            style={{ background: '#25b7e820', color: '#13b5ea', border: '1px solid #25b7e840' }}
-          >
-            <ClipboardList className="w-3 h-3" />
-            Histórico
-          </button>
+          <>
+            <span
+              className="flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-full ml-2"
+              style={{ background: `${XERO.success}20`, color: XERO.success, border: `1px solid ${XERO.success}40` }}
+            >
+              <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: XERO.success }} />
+              {session.terminal_name}
+            </span>
+            <button
+              onClick={() => setShowHistory(true)}
+              className="flex items-center gap-1.5 text-[11px] font-bold px-3 py-1 rounded-full ml-2 transition-opacity hover:opacity-80"
+              style={{ background: '#25b7e820', color: '#13b5ea', border: '1px solid #25b7e840' }}
+            >
+              <ClipboardList className="w-3 h-3" />
+              Histórico
+            </button>
+          </>
         ) : (
           <button
             onClick={() => setShowSession(true)}
@@ -2273,6 +2279,7 @@ export default function POSView() {
             canPay={cart.length > 0 && !!session}
             onPrint={() => handlePrint(lastSale)}
             lastSale={lastSale}
+            onVoid={() => setShowVoid(true)}
           />
         </div>
 
