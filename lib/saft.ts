@@ -442,7 +442,7 @@ ${taxTable}
           <UnitPrice>${money(it.price)}</UnitPrice>${lineReferences}
           <TaxPointDate>${isoDate(inv.issued_at)}</TaxPointDate>
           <Description>${esc(it.description)}</Description>
-          <${amountTag}>${money(it.total)}</${amountTag}>
+          <${amountTag}>${money(it.total)}</${amountTag}>${Number(it.discount) > 0 ? `\n          <SettlementAmount>${money(it.discount)}</SettlementAmount>` : ''}
           <Tax>
             <TaxType>IVA</TaxType>
             <TaxCountryRegion>AO</TaxCountryRegion>
@@ -484,13 +484,13 @@ ${itemLines}
         <DocumentTotals>
           <TaxPayable>${money(inv.tax)}</TaxPayable>
           <NetTotal>${money(inv.subtotal)}</NetTotal>
-          <GrossTotal>${money(inv.total)}</GrossTotal>${Number(inv.discount) > 0 ? `\n          <Settlement>\n            <SettlementAmount>${money(inv.discount)}</SettlementAmount>\n          </Settlement>` : ''}
+          <GrossTotal>${money(inv.total)}</GrossTotal>${Number(inv.retention_tax) > 0 ? `\n          <WithholdingTax>\n            <WithholdingTaxType>IRT</WithholdingTaxType>\n            <WithholdingTaxDescription>Retenção na fonte</WithholdingTaxDescription>\n            <WithholdingTaxAmount>${money(inv.retention_tax)}</WithholdingTaxAmount>\n          </WithholdingTax>` : ''}
         </DocumentTotals>
       </Invoice>`;
   }).join('\n');
 
-  /* ---------- WorkingDocuments (PP) ---------- */
-  const WORK_TYPES = new Set(['PP']);
+  /* ---------- WorkingDocuments (PP, OR) ---------- */
+  const WORK_TYPES = new Set(['PP', 'OR']);
   const workingList = invoices.filter(inv => WORK_TYPES.has((inv.document_type || '').toUpperCase()));
   const totalWorkingCredit = workingList
     .filter(inv => inv.status !== 'cancelled')
@@ -525,7 +525,7 @@ ${itemLines}
           <UnitPrice>${money(it.price)}</UnitPrice>
           <TaxPointDate>${isoDate(inv.issued_at)}</TaxPointDate>
           <Description>${esc(it.description)}</Description>
-          <CreditAmount>${money(it.total)}</CreditAmount>
+          <CreditAmount>${money(it.total)}</CreditAmount>${Number(it.discount) > 0 ? `\n          <SettlementAmount>${money(it.discount)}</SettlementAmount>` : ''}
           <Tax>
             <TaxType>IVA</TaxType>
             <TaxCountryRegion>AO</TaxCountryRegion>

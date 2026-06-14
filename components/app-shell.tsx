@@ -79,7 +79,7 @@ const getXeroMenus = (role?: string, isPlatformAdmin?: boolean) => {
         { href: '/invoices/new', label: 'Nova Fatura' },
         { href: '/pos-close', label: 'Fecho de Caixa' },
         { divider: true },
-        { href: '/products', label: 'Consulta de Artigos' },
+        { href: '/products', label: 'Produtos/Serviços' },
       ];
     }
   }

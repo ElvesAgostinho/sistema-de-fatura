@@ -1220,7 +1220,7 @@ function ProductConsultModal({ product, onClose }: { product: POSProduct, onClos
         <div className="p-5 flex justify-between items-center" style={{ background: `${XERO.cyan}10`, borderBottom: `1px solid ${XERO.border}` }}>
           <div className="flex items-center gap-2">
             <Scan className="w-5 h-5" style={{ color: XERO.cyan }} />
-            <h3 className="font-bold text-sm uppercase tracking-wide" style={{ color: XERO.navy }}>Consulta de Artigo</h3>
+            <h3 className="font-bold text-sm uppercase tracking-wide" style={{ color: XERO.navy }}>Consulta de Produto/Serviço</h3>
           </div>
           <button onClick={onClose}><X className="w-5 h-5" style={{ color: XERO.muted }} /></button>
         </div>
@@ -2378,7 +2378,7 @@ export default function POSView() {
             style={{ borderColor: XERO.border, background: XERO.card, paddingTop: touchMode ? '12px' : '10px', paddingBottom: touchMode ? '8px' : '6px' }}
           >
             <div className="flex justify-between text-xs mb-1" style={{ color: XERO.muted }}>
-              <span>{totals.items} artigo{totals.items !== 1 ? 's' : ''}</span>
+              <span>{totals.items} ite{totals.items !== 1 ? 'ns' : 'm'}</span>
               <span className="tabular-nums">Subtotal: {kz(totals.subtotal)}</span>
             </div>
             <div className="flex justify-between text-xs mb-2" style={{ color: XERO.muted }}>

@@ -21,7 +21,8 @@ const DOC_TYPES = [
   { value: 'NC', label: 'Nota de Crédito (NC)', desc: 'Retifica / anula FT anterior (devoluções, descontos)' },
   { value: 'ND', label: 'Nota de Débito (ND)', desc: 'Adiciona valor a FT anterior (juros, encargos)' },
   { value: 'RC', label: 'Recibo (RC)', desc: 'Comprovativo de recebimento' },
-  { value: 'PP', label: 'Pró-forma (PP)', desc: 'Orçamento sem valor fiscal ou dívida' },
+  { value: 'PP', label: 'Pró-forma (PP)', desc: 'Orçamento/Proforma para produtos' },
+  { value: 'OR', label: 'Orçamento (OR)', desc: 'Orçamento para prestação de serviços' },
   { value: 'GT', label: 'Guia de Transporte (GT)', desc: 'Acompanha bens em circulação' },
 ] as const;
 
@@ -31,7 +32,7 @@ export default function NewInvoiceView() {
   const router = useRouter();
   const { invoiceDraft, setInvoiceDraft } = useAppStore();
   const [mounted, setMounted] = useState(false);
-  const [docType, setDocType] = useState<'FT'|'FR'|'NC'|'ND'|'RC'|'PP'|'GT'>(invoiceDraft?.docType ?? 'FT');
+  const [docType, setDocType] = useState<'FT'|'FR'|'NC'|'ND'|'RC'|'PP'|'OR'|'GT'>(invoiceDraft?.docType ?? 'FT');
   const [relatedDocument, setRelatedDocument] = useState(invoiceDraft?.relatedDocument ?? '');
   const [clientId, setClientId] = useState(invoiceDraft?.clientId ?? '');
   const [items, setItems] = useState<Item[]>(invoiceDraft?.items ?? [{ id: uid(), description: '', quantity: 1, price: 0, tax_rate: 14 }]);
@@ -40,6 +41,7 @@ export default function NewInvoiceView() {
   const [paymentMethod, setPaymentMethod] = useState<'Dinheiro'|'Multicaixa'|'Transferência'|'Cheque'>('Dinheiro');
   const [validUntil, setValidUntil] = useState('');
   const [transportDetails, setTransportDetails] = useState({ loadLocation: '', unloadLocation: '', licensePlate: '', startDate: '' });
+  const [applyRetention, setApplyRetention] = useState(invoiceDraft?.applyRetention ?? false);
   const [submitting, setSubmitting] = useState(false);
   const [clientModal, setClientModal] = useState(false);
   const [productModal, setProductModal] = useState<string | null>(null);
@@ -51,9 +53,9 @@ export default function NewInvoiceView() {
 
   useEffect(() => {
     if (mounted) {
-      setInvoiceDraft({ docType, relatedDocument, clientId, items, taxExempt, taxExemptionReason });
+      setInvoiceDraft({ docType, relatedDocument, clientId, items, taxExempt, taxExemptionReason, applyRetention });
     }
-  }, [mounted, docType, relatedDocument, clientId, items, taxExempt, taxExemptionReason, setInvoiceDraft]);
+  }, [mounted, docType, relatedDocument, clientId, items, taxExempt, taxExemptionReason, applyRetention, setInvoiceDraft]);
 
   const { data: clientsData, mutate: mutateClients } = useResource<{ clients: any[] }>('/api/clients', { ttl: 60_000 });
   const { data: productsData, mutate: mutateProducts } = useResource<{ products: any[] }>('/api/products', { ttl: 60_000 });
@@ -69,8 +71,14 @@ export default function NewInvoiceView() {
       subtotal += lineSub;
       tax += lineSub * (rate / 100);
     }
-    return { subtotal: +subtotal.toFixed(2), tax: +tax.toFixed(2), total: +(subtotal + tax).toFixed(2) };
-  }, [items, taxExempt]);
+    const retentionTax = applyRetention ? subtotal * 0.065 : 0;
+    return { 
+      subtotal: +subtotal.toFixed(2), 
+      tax: +tax.toFixed(2), 
+      retentionTax: +retentionTax.toFixed(2),
+      total: +(subtotal + tax - retentionTax).toFixed(2) 
+    };
+  }, [items, taxExempt, applyRetention]);
 
   const updateItem = (id: string, patch: Partial<Item>) => setItems((prev) => prev.map((x) => x.id === id ? { ...x, ...patch } : x));
   const addEmptyItem = () => setItems((prev) => [...prev, { id: uid(), description: '', quantity: 1, price: 0, tax_rate: 14 }]);
@@ -93,7 +101,7 @@ export default function NewInvoiceView() {
       toast.error(`${docType === 'NC' ? 'Nota de Crédito' : 'Nota de Débito'}: indique o número da fatura original (ex: FT 2026/0001)`);
       return;
     }
-    if (docType === 'PP' && !validUntil) { toast.error('A data de validade é obrigatória para a Pró-forma.'); return; }
+    if ((docType === 'PP' || docType === 'OR') && !validUntil) { toast.error('A data de validade é obrigatória para Pró-forma ou Orçamento.'); return; }
     if (docType === 'GT') {
       if (!transportDetails.loadLocation || !transportDetails.unloadLocation || !transportDetails.licensePlate || !transportDetails.startDate) {
         toast.error('Preencha todos os detalhes da Guia de Transporte.'); return;
@@ -111,8 +119,9 @@ export default function NewInvoiceView() {
           document_type: docType,
           related_document: (docType === 'NC' || docType === 'ND') ? relatedDocument.trim() : null,
           payment_method: (docType === 'FR' || docType === 'RC') ? paymentMethod : null,
-          valid_until: docType === 'PP' ? new Date(validUntil).toISOString() : null,
+          valid_until: (docType === 'PP' || docType === 'OR') ? new Date(validUntil).toISOString() : null,
           transport_details: docType === 'GT' ? transportDetails : null,
+          apply_retention: applyRetention,
         }),
       });
       const text = await r.text();
@@ -192,7 +201,7 @@ export default function NewInvoiceView() {
               </div>
             )}
             
-            {docType === 'PP' && (
+            {(docType === 'PP' || docType === 'OR') && (
               <div className="mt-4 pt-4 border-t border-border">
                 <label className="text-xs text-muted-foreground mb-1 block">Validade do Orçamento</label>
                 <input
@@ -331,6 +340,15 @@ export default function NewInvoiceView() {
                 </div>
               </div>
             )}
+            
+            {(docType === 'FT' || docType === 'FR' || docType === 'RC') && (
+              <div className="mt-4 pt-4 border-t border-border">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={applyRetention} onChange={(e) => setApplyRetention(e.target.checked)} className="w-4 h-4 accent-primary" />
+                  <span className="text-sm font-medium">Aplicar Retenção na Fonte (IRT 6.5%)</span>
+                </label>
+              </div>
+            )}
           </div>
         </div>
 
@@ -341,8 +359,11 @@ export default function NewInvoiceView() {
             <div className="space-y-2 text-sm">
               <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span className="font-mono">{formatAOA(totals.subtotal)}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">IVA{taxExempt ? ' (isento)' : ''}</span><span className="font-mono">{formatAOA(totals.tax)}</span></div>
+              {applyRetention && (
+                <div className="flex justify-between text-destructive"><span>Retenção (IRT 6.5%)</span><span className="font-mono">-{formatAOA(totals.retentionTax)}</span></div>
+              )}
               <div className="h-px bg-border my-2" />
-              <div className="flex justify-between text-base font-bold"><span>Total</span><span className="font-mono text-primary">{formatAOA(totals.total)}</span></div>
+              <div className="flex justify-between text-base font-bold"><span>Total a Pagar</span><span className="font-mono text-primary">{formatAOA(totals.total)}</span></div>
             </div>
             <button onClick={onSubmit} disabled={submitting} className="mt-5 w-full ms-btn-primary justify-center h-11 disabled:opacity-60">
               {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Emitir {DOC_TYPES.find(d=>d.value===docType)?.label.replace(/ \(.+\)/, '') ?? 'documento'}</>}

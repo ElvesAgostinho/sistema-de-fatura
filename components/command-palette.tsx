@@ -57,7 +57,7 @@ export function CommandPalette() {
             </CommandItem>
             <CommandItem onSelect={() => runCommand(() => router.push('/products'))}>
               <Package className="mr-2 h-4 w-4" />
-              <span>Adicionar Artigo</span>
+              <span>Adicionar Produto/Serviço</span>
             </CommandItem>
           </CommandGroup>
           <CommandGroup heading="Navegação">

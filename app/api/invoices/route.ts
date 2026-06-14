@@ -26,7 +26,7 @@ export async function GET(req: Request) {
     const admin = createAdminClient();
     let query = admin
       .from('invoices')
-      .select('id, invoice_number, total, status, created_at, issued_at, payment_status, amount_paid, document_type, client:clients(name, nif)', { count: 'exact' })
+      .select('id, invoice_number, total, subtotal, tax, retention_tax, retention_rate, status, created_at, issued_at, payment_status, amount_paid, document_type, client:clients(name, nif)', { count: 'exact' })
       .eq('company_id', ctx.profile.company_id);
 
     if (clientId) query = query.eq('client_id', clientId);
@@ -68,21 +68,27 @@ export async function POST(req: Request) {
     if (!client_id) return ApiResponse.error('Cliente obrigatório');
     if (!Array.isArray(items) || items.length === 0) return ApiResponse.error('Adicione pelo menos um item');
     const docType = document_type || 'FT';
-    if (!['FT', 'FR', 'NC', 'ND', 'RC', 'PP', 'GT'].includes(docType)) return ApiResponse.error('Tipo de documento inválido');
+    if (!['FT', 'FR', 'NC', 'ND', 'RC', 'PP', 'OR', 'GT'].includes(docType)) return ApiResponse.error('Tipo de documento inválido');
 
     const admin = createAdminClient();
+
+    // Fetch Fiscal Config for defaults
+    const { data: fc } = await admin.from('fiscal_config').select('default_tax_exemption_reason, default_retention_rate').eq('company_id', companyId).maybeSingle();
 
     // Verify client
     const { data: client } = await admin.from('clients').select('*').eq('id', client_id).eq('company_id', companyId).maybeSingle();
     if (!client) return ApiResponse.error('Cliente não encontrado', 404);
 
     // Compute totals
-    let subtotal = 0, tax = 0, total = 0;
+    let subtotal = 0, tax = 0, total = 0, totalDiscount = 0;
     const cleanItems: any[] = [];
+    const finalTaxExemptReason = tax_exempt ? (tax_exemption_reason || fc?.default_tax_exemption_reason || 'M00') : null;
+
     for (const it of items) {
       const qty = Number(it?.quantity);
       const price = Number(it?.price);
       const rate = tax_exempt ? 0 : Number(it?.tax_rate ?? 14);
+      const discountPct = Number(it?.discount ?? 0);
       const desc = String(it?.description ?? '').trim();
       
       if (!desc) return ApiResponse.error('Descrição do item em falta');
@@ -90,20 +96,35 @@ export async function POST(req: Request) {
       if (!Number.isFinite(price) || price < 0) return ApiResponse.error('Preço inválido');
 
       const lineSubtotal = +(qty * price).toFixed(2);
-      const lineTax = +(lineSubtotal * (rate / 100)).toFixed(2);
-      const lineTotal = +(lineSubtotal + lineTax).toFixed(2);
-      subtotal += lineSubtotal; tax += lineTax; total += lineTotal;
+      const discountAmt = +(lineSubtotal * (discountPct / 100)).toFixed(2);
+      const lineNet = lineSubtotal - discountAmt;
+      const lineTax = +(lineNet * (rate / 100)).toFixed(2);
+      const lineTotal = +(lineNet + lineTax).toFixed(2);
+      
+      subtotal += lineSubtotal;
+      totalDiscount += discountAmt;
+      tax += lineTax; 
+      total += lineTotal;
       
       cleanItems.push({ 
         description: desc, 
         quantity: qty, 
         price, 
         tax_rate: rate, 
+        discount: discountAmt,
         total: lineTotal,
         product_id: it?.product_id ?? null
       });
     }
     subtotal = +subtotal.toFixed(2); tax = +tax.toFixed(2); total = +total.toFixed(2);
+
+    let retentionRate = 0;
+    let retentionTax = 0;
+    if (body.apply_retention) {
+      retentionRate = Number(fc?.default_retention_rate ?? 6.5);
+      // Retenção é calculada sobre o valor líquido (subtotal - descontos)
+      retentionTax = +((subtotal - totalDiscount) * (retentionRate / 100)).toFixed(2);
+    }
 
     // Enterprise ERP Logic: Credit Note Strict Validation
     if (docType === 'NC') {
@@ -186,10 +207,11 @@ export async function POST(req: Request) {
         company_id: companyId, client_id, invoice_number: sequence, document_type: docType,
         subtotal, tax, total, status: 'issued', hash, signature,
         signature_key_id: signatureKeyId, previous_hash: prevHash || null,
-        tax_exempt: !!tax_exempt, tax_exemption_reason: tax_exempt ? tax_exemption_reason : null,
+        tax_exempt: !!tax_exempt, tax_exemption_reason: tax_exempt ? finalTaxExemptReason : null,
+        retention_tax: retentionTax, retention_rate: retentionRate,
         related_document: related_document || null, created_by: ctx.user.id, issued_at: issuedAt,
         client_name: client.name, client_nif: client.nif, client_address: client.address,
-        valid_until: docType === 'PP' ? valid_until : null,
+        valid_until: (docType === 'PP' || docType === 'OR') ? valid_until : null,
         transport_details: docType === 'GT' ? transport_details : null,
         amount_paid: (docType === 'FR' || docType === 'RC') ? total : 0,
         payment_status: (docType === 'FR' || docType === 'RC') ? 'pago' : 'pendente'

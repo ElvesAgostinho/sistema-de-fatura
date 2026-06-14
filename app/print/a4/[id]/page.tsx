@@ -39,7 +39,7 @@ export default async function A4PrintPage({ params, searchParams }: { params: { 
 
   const DOC_LABELS: Record<string, string> = {
     FT: 'FATURA', FR: 'FATURA-RECIBO', NC: 'NOTA DE CRÉDITO',
-    ND: 'NOTA DE DÉBITO', RC: 'RECIBO', PP: 'FATURA PRÓ-FORMA', GT: 'GUIA DE TRANSPORTE',
+    ND: 'NOTA DE DÉBITO', RC: 'RECIBO', PP: 'FATURA PRÓ-FORMA', OR: 'ORÇAMENTO', GT: 'GUIA DE TRANSPORTE',
   };
   const docLabel = DOC_LABELS[invoice.document_type] ?? invoice.document_type;
   const viaLabel = searchParams?.via === '2' ? '2ª Via em conformidade com o original' : 'Original';

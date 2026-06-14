@@ -38,7 +38,7 @@ export default async function PosReceiptPrintPage({ params, searchParams }: { pa
 
   const DOC_LABELS: Record<string, string> = {
     FT: 'FATURA', FR: 'FATURA-RECIBO', NC: 'NOTA CRÉDITO',
-    ND: 'NOTA DÉBITO', RC: 'RECIBO', PP: 'PRÓ-FORMA', GT: 'GUIA TRANSPORTE',
+    ND: 'NOTA DÉBITO', RC: 'RECIBO', PP: 'PRÓ-FORMA', OR: 'ORÇAMENTO', GT: 'GUIA TRANSPORTE',
   };
   const docLabel = DOC_LABELS[invoice.document_type] ?? invoice.document_type;
   const viaLabel = searchParams?.via === '2' ? '2ª Via' : 'Original';
@@ -134,7 +134,7 @@ export default async function PosReceiptPrintPage({ params, searchParams }: { pa
         <table style={{ width: '100%', fontSize: '10px', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid #000' }}>
-              <th style={{ textAlign: 'left', paddingBottom: '3px', fontWeight: 'bold' }}>Artigo</th>
+              <th style={{ textAlign: 'left', paddingBottom: '3px', fontWeight: 'bold' }}>Descrição</th>
               <th style={{ textAlign: 'center', width: '24px', fontWeight: 'bold' }}>Qtd</th>
               <th style={{ textAlign: 'right', fontWeight: 'bold' }}>Total</th>
             </tr>

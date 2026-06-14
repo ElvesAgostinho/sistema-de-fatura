@@ -286,7 +286,7 @@ ${/* ════ TABELA DE ITENS — estilo Xero ════ */''}
   <thead>
     <tr>
       <th style="width:26px;">#</th>
-      <th>Artigo / Descrição</th>
+      <th>Descrição / Produto ou Serviço</th>
       <th class="c" style="width:44px;">Qtd</th>
       <th class="r" style="width:110px;">Preço Unit.</th>
       <th class="c" style="width:44px;">IVA</th>

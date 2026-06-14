@@ -62,13 +62,13 @@ export async function GET(req: Request) {
     .select(`
       id, invoice_number, document_type, issued_at, status,
       cancellation_reason, cancelled_at,
-      subtotal, tax, total,
+      subtotal, tax, total, retention_tax, retention_rate,
       hash, previous_hash, signature,
       client_nif, client_name, related_document,
       tax_exempt, tax_exemption_reason,
       items:invoice_items(
-        description, quantity, price, tax_rate, total,
-        tax_exemption_reason, unit_of_measure
+        description, quantity, price, tax_rate, total, discount,
+        tax_exemption_reason, unit_of_measure, product:products(code)
       )
     `)
     .eq('company_id', companyId)
@@ -92,7 +92,7 @@ export async function GET(req: Request) {
   // ── Products (incluindo product_type) ──
   const { data: products } = await admin
     .from('products')
-    .select('id, name, description, price, tax_rate, product_type')
+    .select('id, name, description, price, tax_rate, product_type, code')
     .eq('company_id', companyId);
 
   // ── Suppliers (para secção <Supplier> no MasterFiles) ──
@@ -122,18 +122,24 @@ export async function GET(req: Request) {
       unit_price: p.price,
       tax_rate: p.tax_rate,
       product_type: p.product_type ?? 'S',
+      code: p.code ?? null,
     })),
     invoices: (invoices ?? []).map((inv: any) => {
       const orig = inv.related_document ? origInvoiceMap.get(inv.related_document) : null;
+      const items = (inv.items ?? []).map((it: any) => ({
+        ...it,
+        unit_of_measure: it.unit_of_measure ?? 'UN',
+        tax_exemption_reason: it.tax_exemption_reason ?? null,
+        code: it.product?.code ?? null,
+        discount: it.discount ?? 0,
+      }));
+      const globalDiscount = items.reduce((sum: number, it: any) => sum + Number(it.discount), 0);
       return {
         ...inv,
         original_invoice_number: orig ? orig.invoice_number : null,
         original_issued_at: orig ? orig.issued_at : null,
-        items: (inv.items ?? []).map((it: any) => ({
-          ...it,
-          unit_of_measure: it.unit_of_measure ?? 'UN',
-          tax_exemption_reason: it.tax_exemption_reason ?? null,
-        })),
+        discount: globalDiscount,
+        items,
       };
     }),
     suppliers: (suppliers ?? []).map((s: any) => ({

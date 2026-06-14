@@ -23,7 +23,7 @@ export default async function PublicInvoicePage({ params }: { params: { token: s
 
   const docTypeLabels: Record<string, string> = {
     FT: 'Fatura', FR: 'Fatura-Recibo', NC: 'Nota de Crédito',
-    ND: 'Nota de Débito', RC: 'Recibo',
+    ND: 'Nota de Débito', RC: 'Recibo', PP: 'Fatura Pró-forma', OR: 'Orçamento', GT: 'Guia de Transporte',
   };
   const docLabel = docTypeLabels[invoice.document_type] || invoice.document_type;
 
