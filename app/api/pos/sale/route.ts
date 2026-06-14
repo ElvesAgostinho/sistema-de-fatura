@@ -49,32 +49,35 @@ export async function POST(req: Request) {
     }
 
     // ── Compute totals ──────────────────────────────────────────────────
-    let subtotal = 0, tax = 0, total = 0;
+    let subtotal = 0, tax = 0, total = 0, totalDiscount = 0;
     const cleanItems: any[] = [];
 
     for (const it of items) {
       const qty      = Number(it.quantity);
       const price    = Number(it.price);
-      const disc     = Number(it.discount_pct ?? 0) / 100;
+      const discPct  = Number(it.discount_pct ?? 0);
       const rate     = tax_exempt ? 0 : Number(it.tax_rate ?? 14);
       const desc     = String(it.name ?? it.description ?? '').trim();
 
       if (!desc || qty <= 0 || price < 0) continue;
 
-      const effectivePrice  = +(price * (1 - disc)).toFixed(4);
-      const lineSubtotal    = +(effectivePrice * qty).toFixed(2);
-      const lineTax         = +(lineSubtotal * (rate / 100)).toFixed(2);
-      const lineTotal       = +(lineSubtotal + lineTax).toFixed(2);
+      const lineSubtotal    = +(price * qty).toFixed(2);
+      const discountAmt     = +(lineSubtotal * (discPct / 100)).toFixed(2);
+      const lineNet         = lineSubtotal - discountAmt;
+      const lineTax         = +(lineNet * (rate / 100)).toFixed(2);
+      const lineTotal       = +(lineNet + lineTax).toFixed(2);
 
       subtotal += lineSubtotal;
+      totalDiscount += discountAmt;
       tax      += lineTax;
       total    += lineTotal;
 
       cleanItems.push({
         description: desc,
         quantity: qty,
-        price: effectivePrice,
+        price: price,
         tax_rate: rate,
+        discount: discountAmt,
         total: lineTotal,
         product_id: it.product_id ?? null,
       });

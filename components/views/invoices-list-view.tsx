@@ -121,6 +121,7 @@ export default function InvoicesListView() {
               <option value="ND">ND — Nota de Débito</option>
               <option value="RC">RC — Recibo</option>
               <option value="PP">PP — Pró-forma</option>
+              <option value="OR">OR — Orçamento</option>
               <option value="GT">GT — Guia de Transporte</option>
             </select>
           </div>
