@@ -365,6 +365,7 @@ export default function NewInvoiceView() {
         <div className="lg:col-span-1">
           <div className="ms-card p-5 lg:sticky lg:top-4">
             <h3 className="font-semibold mb-4">Resumo</h3>
+            <div className="space-y-2 text-sm">
               <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span className="font-mono">{formatAOA(totals.subtotal)}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Desconto</span><span className="font-mono text-emerald-600">-{formatAOA(totals.totalDiscount)}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">IVA{taxExempt ? ' (isento)' : ''}</span><span className="font-mono">{formatAOA(totals.tax)}</span></div>
@@ -374,6 +375,7 @@ export default function NewInvoiceView() {
               <div className="h-px bg-border my-2" />
               <div className="flex justify-between text-base font-bold"><span>Total a Pagar</span><span className="font-mono text-primary">{formatAOA(totals.total)}</span></div>
             </div>
+          </div>
             <button onClick={onSubmit} disabled={submitting} className="mt-5 w-full ms-btn-primary justify-center h-11 disabled:opacity-60">
               {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Emitir {DOC_TYPES.find(d=>d.value===docType)?.label.replace(/ \(.+\)/, '') ?? 'documento'}</>}
             </button>
