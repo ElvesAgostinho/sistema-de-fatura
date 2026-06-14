@@ -173,11 +173,14 @@ export async function POST(req: Request) {
       for (const item of cleanItems) {
         if (!item.product_id) continue;
         const p = productMap.get(item.product_id);
+        // [Opção B] Modo Hipermercado: Não bloqueia a venda mesmo se track_stock estiver activo e não houver stock.
+        /*
         if (p?.track_stock && (p.quantity_in_stock ?? 0) < item.quantity) {
           // Rollback: mark invoice as cancelled if stock insufficient
           await admin.from('invoices').update({ status: 'cancelled', cancellation_reason: 'Stock insuficiente (validação POS)' }).eq('id', invoice.id);
           return ApiResponse.error(`Stock insuficiente: ${p.name ?? item.product_id} (disponível: ${p.quantity_in_stock ?? 0}, pedido: ${item.quantity})`);
         }
+        */
       }
     }
 

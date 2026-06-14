@@ -1065,6 +1065,17 @@ function TouchActionBar({
           border: XERO.border,
         }
       : null,
+    lastSale
+      ? {
+          key: 'F10',
+          label: 'Anular Venda',
+          icon: <AlertTriangle className={touchMode ? 'w-5 h-5' : 'w-3.5 h-3.5'} />,
+          onClick: () => setShowVoid(true),
+          bg: XERO.danger,
+          color: '#fff',
+          border: 'transparent',
+        }
+      : null,
   ].filter(Boolean) as any[];
 
   return (
@@ -1335,6 +1346,7 @@ export default function POSView() {
       if (e.key === 'F5') { e.preventDefault(); setCart([]); return; }
       if (e.key === 'F8') { e.preventDefault(); setIsConsulting(prev => !prev); return; }
       if (e.key === 'F9') { e.preventDefault(); if (lastSale) handlePrint(lastSale); return; }
+      if (e.key === 'F10') { e.preventDefault(); if (lastSale) setShowVoid(true); return; }
       if (e.key === 'Escape') { e.preventDefault(); setShowPayment(false); setShowDiscount(null); setIsConsulting(false); return; }
 
       /* ── Ignore if user is typing in a modal / other input ── */
