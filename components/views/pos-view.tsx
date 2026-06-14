@@ -1199,10 +1199,15 @@ export default function POSView() {
     });
   }, []);
 
-  /* ── Keep always-fresh refs for use inside event handlers ──────────────── */
-  useEffect(() => { productsRef.current = products; }, [products]);
-  useEffect(() => { sessionRef.current  = session;  }, [session]);
-  useEffect(() => { addToCartRef.current = addToCart; }, [addToCart]);
+  /*
+   * Always-fresh refs — updated synchronously on every render (no useEffect).
+   * This is the correct pattern for using state/callbacks inside global event
+   * listeners without stale-closure issues. Do NOT wrap in useEffect: that
+   * would place them BEFORE the variables they reference (TDZ error).
+   */
+  productsRef.current = products;
+  sessionRef.current  = session;
+  // addToCartRef is updated right after addToCart is declared (further below)
 
   /* ── Global scanner + keyboard shortcuts (single listener) ──────────────── */
   useEffect(() => {
@@ -1406,6 +1411,7 @@ export default function POSView() {
       })];
     });
   }, [session]);
+  addToCartRef.current = addToCart; // keep ref fresh (always-fresh ref pattern)
 
   const changeQty      = useCallback((id: string, qty: number) => {
     if (qty <= 0) { setCart(prev => prev.filter(i => i.product_id !== id)); return; }
