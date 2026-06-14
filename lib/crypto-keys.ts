@@ -167,18 +167,23 @@ export function buildInvoiceSignaturePayload(params: {
   previous_hash: string | null | undefined;
   system_entry_date?: string | Date;
 }): string {
-  const ts = (v: string | Date | undefined) => {
+  const dateStr = (v: string | Date | undefined) => {
     if (!v) return '';
     const d = v instanceof Date ? v : new Date(v);
-    return isNaN(d.getTime()) ? String(v) : d.toISOString();
+    return isNaN(d.getTime()) ? String(v) : d.toISOString().slice(0, 10);
+  };
+  const dateTimeStr = (v: string | Date | undefined) => {
+    if (!v) return '';
+    const d = v instanceof Date ? v : new Date(v);
+    return isNaN(d.getTime()) ? String(v) : d.toISOString().replace(/\.\d{3}Z$/, 'Z');
   };
   const money = (v: number | string) => {
     const n = typeof v === 'number' ? v : Number(v);
     return Number.isFinite(n) ? n.toFixed(2) : '0.00';
   };
   return [
-    ts(params.issued_at),
-    ts(params.system_entry_date ?? params.issued_at),
+    dateStr(params.issued_at),
+    dateTimeStr(params.system_entry_date ?? params.issued_at),
     (params.invoice_number ?? '').trim(),
     money(params.total),
     params.previous_hash ?? '',
