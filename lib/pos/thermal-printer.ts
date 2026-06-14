@@ -81,6 +81,7 @@ export interface ReceiptData {
     price: number;
     total: number;
     tax_rate?: number;         // Taxa IVA por artigo (default 14)
+    sku?: string;              // Cód/Ref do artigo
   }>;
   subtotal: number;
   tax: number;
@@ -195,6 +196,7 @@ export function buildReceiptCommands(data: ReceiptData): Uint8Array {
 
   // Items
   for (const item of data.items) {
+    if (item.sku) push(line(`[${item.sku}]`));
     push(line(item.name.slice(0, 32)));
     const taxNote = item.tax_rate != null ? ` (IVA ${item.tax_rate}%)` : '';
     push(twoCol(`  ${item.qty}x ${fmt(item.price)}${taxNote}`, fmt(item.total)));
@@ -377,8 +379,12 @@ ${data.cashierName ? `<div>Operador: ${data.cashierName}</div>` : ''}
 ${data.clientName ? `<div>Cliente: ${data.clientName}</div>` : ''}
 ${data.clientNif ? `<div>NIF Cliente: ${data.clientNif}</div>` : ''}
 <div class="divider"></div>
-${data.items.map(i => `<div>${i.name}</div><div class="row"><span>  ${i.qty}x ${fmt(i.price)}${i.tax_rate != null ? ` (IVA ${i.tax_rate}%)` : ''}</span><span>${fmt(i.total)}</span></div>`).join('')}
-<div class="divider"></div>
+  ${data.items.map(i => `
+    ${i.sku ? `<div style="font-size:10px;color:#555;">[Ref: ${i.sku}]</div>` : ''}
+    <div>${i.name}</div>
+    <div class="row"><span>  ${i.qty}x ${fmt(i.price)}${i.tax_rate != null ? ` (IVA ${i.tax_rate}%)` : ''}</span><span>${fmt(i.total)}</span></div>
+  `).join('')}
+  <div class="divider"></div>
 <div class="row"><span>Subtotal s/ IVA:</span><span>${fmt(data.subtotal)}</span></div>
 ${taxLabel}
 <div class="row bold big"><span>TOTAL:</span><span>${fmt(data.total)}</span></div>
