@@ -1864,51 +1864,53 @@ export default function POSView() {
             className="px-3 border-b shrink-0"
             style={{ background: XERO.card, borderColor: XERO.border, paddingTop: touchMode ? '10px' : '8px', paddingBottom: touchMode ? '10px' : '8px' }}
           >
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: XERO.muted }} />
-              <Scan className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5" style={{ color: XERO.cyan }} />
-              <input
-                ref={searchRef}
-                type="text"
-                value={search}
-                onChange={e => onSearchChange(e.target.value)}
-                onKeyDown={onSearchKeyDown}
-                placeholder="Pesquisar produto, SKU ou código de barras… (F2 / Enter)"
-                className="w-full rounded-lg border pl-9 pr-9 focus:outline-none transition-colors"
-                style={{
-                  borderColor: search ? XERO.cyan : XERO.border,
-                  background: XERO.bg,
-                  color: XERO.text,
-                  fontSize: touchMode ? '15px' : '14px',
-                  padding: touchMode ? '10px 36px' : '8px 36px',
-                }}
-              />
-              {search && (
-                <button
-                  onClick={() => setSearch('')}
-                  className="absolute right-8 top-1/2 -translate-y-1/2"
-                  style={{ color: XERO.muted }}
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: XERO.muted }} />
+                <input
+                  ref={searchRef}
+                  type="text"
+                  value={search}
+                  onChange={e => onSearchChange(e.target.value)}
+                  onKeyDown={onSearchKeyDown}
+                  placeholder="Pesquisar produto ou passar scanner… (F2 / Enter)"
+                  className="w-full rounded-lg border pl-9 pr-9 focus:outline-none transition-colors"
+                  style={{
+                    borderColor: search ? XERO.cyan : XERO.border,
+                    background: XERO.bg,
+                    color: XERO.text,
+                    fontSize: touchMode ? '15px' : '14px',
+                    padding: touchMode ? '10px 36px' : '8px 36px',
+                  }}
+                />
+                {search && (
+                  <button
+                    onClick={() => setSearch('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2"
+                    style={{ color: XERO.muted }}
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
               <button
                 onClick={() => setIsConsulting(p => !p)}
-                className="hidden md:flex absolute right-1 top-1 bottom-1 items-center gap-1.5 px-3 rounded text-xs font-bold transition-colors"
+                className="flex items-center justify-center gap-1.5 px-3 rounded-lg text-sm font-bold transition-colors border shrink-0"
                 style={{
-                  background: isConsulting ? XERO.warning : 'transparent',
+                  background: isConsulting ? XERO.warning : XERO.bg,
                   color: isConsulting ? '#fff' : XERO.muted,
+                  borderColor: isConsulting ? 'transparent' : XERO.border,
                 }}
-                title="Consultar Artigo (F8)"
+                title="Modo Consulta (F8)"
               >
                 <Scan className="w-4 h-4" />
-                <span>[F8] Consulta</span>
+                <span className="hidden lg:inline">[F8] Consulta</span>
               </button>
             </div>
             {isConsulting && (
-              <div className="mt-2 py-1.5 px-3 rounded flex items-center gap-2 text-sm font-bold animate-pulse" style={{ background: `${XERO.warning}15`, color: XERO.warning }}>
-                <Scan className="w-4 h-4" />
-                Modo Consulta activo: passe o artigo pelo scanner.
+              <div className="mt-2 py-1.5 px-3 rounded-lg flex items-center gap-2 text-sm font-bold" style={{ background: `${XERO.warning}15`, color: XERO.warning }}>
+                <AlertCircle className="w-4 h-4" />
+                Modo Consulta (F8): Passe o scanner no produto ou pesquise e pressione Enter.
               </div>
             )}
           </div>
