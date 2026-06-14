@@ -13,7 +13,7 @@ import { useResource } from '@/lib/hooks/use-resource';
 
 type Client = { id: string; name: string; nif: string };
 type Product = { id: string; name: string; price: number; tax_rate: number; description?: string | null };
-type Item = { id: string; description: string; quantity: number; price: number; tax_rate: number; product_id?: string | null };
+type Item = { id: string; description: string; quantity: number; price: number; tax_rate: number; discount?: number; product_id?: string | null };
 
 const DOC_TYPES = [
   { value: 'FT', label: 'Fatura (FT)', desc: 'Documento fiscal padrão de venda' },
@@ -35,7 +35,7 @@ export default function NewInvoiceView() {
   const [docType, setDocType] = useState<'FT'|'FR'|'NC'|'ND'|'RC'|'PP'|'OR'|'GT'>(invoiceDraft?.docType ?? 'FT');
   const [relatedDocument, setRelatedDocument] = useState(invoiceDraft?.relatedDocument ?? '');
   const [clientId, setClientId] = useState(invoiceDraft?.clientId ?? '');
-  const [items, setItems] = useState<Item[]>(invoiceDraft?.items ?? [{ id: uid(), description: '', quantity: 1, price: 0, tax_rate: 14 }]);
+  const [items, setItems] = useState<Item[]>(invoiceDraft?.items ?? [{ id: uid(), description: '', quantity: 1, price: 0, tax_rate: 14, discount: 0 }]);
   const [taxExempt, setTaxExempt] = useState(invoiceDraft?.taxExempt ?? false);
   const [taxExemptionReason, setTaxExemptionReason] = useState(invoiceDraft?.taxExemptionReason ?? '');
   const [paymentMethod, setPaymentMethod] = useState<'Dinheiro'|'Multicaixa'|'Transferência'|'Cheque'>('Dinheiro');
@@ -64,24 +64,29 @@ export default function NewInvoiceView() {
   const products = productsData?.products ?? [];
 
   const totals = useMemo(() => {
-    let subtotal = 0, tax = 0;
+    let subtotal = 0, tax = 0, totalDiscount = 0;
     for (const it of items) {
       const lineSub = (Number(it.quantity) || 0) * (Number(it.price) || 0);
+      const discountPct = Number(it.discount) || 0;
+      const discountAmt = lineSub * (discountPct / 100);
+      const lineNet = lineSub - discountAmt;
       const rate = taxExempt ? 0 : (Number(it.tax_rate) || 0);
       subtotal += lineSub;
-      tax += lineSub * (rate / 100);
+      totalDiscount += discountAmt;
+      tax += lineNet * (rate / 100);
     }
-    const retentionTax = applyRetention ? subtotal * 0.065 : 0;
+    const retentionTax = applyRetention ? (subtotal - totalDiscount) * 0.065 : 0;
     return { 
       subtotal: +subtotal.toFixed(2), 
       tax: +tax.toFixed(2), 
+      totalDiscount: +totalDiscount.toFixed(2),
       retentionTax: +retentionTax.toFixed(2),
-      total: +(subtotal + tax - retentionTax).toFixed(2) 
+      total: +(subtotal - totalDiscount + tax - retentionTax).toFixed(2) 
     };
   }, [items, taxExempt, applyRetention]);
 
   const updateItem = (id: string, patch: Partial<Item>) => setItems((prev) => prev.map((x) => x.id === id ? { ...x, ...patch } : x));
-  const addEmptyItem = () => setItems((prev) => [...prev, { id: uid(), description: '', quantity: 1, price: 0, tax_rate: 14 }]);
+  const addEmptyItem = () => setItems((prev) => [...prev, { id: uid(), description: '', quantity: 1, price: 0, tax_rate: 14, discount: 0 }]);
   const removeItem = (id: string) => setItems((prev) => prev.filter((x) => x.id !== id));
   const applyProduct = (id: string, p: any) => {
     if (!p) return;
@@ -303,21 +308,25 @@ export default function NewInvoiceView() {
                         </div>
                       </div>
                     </div>
-                    <div className="col-span-4">
+                    <div className="col-span-3">
                       <label className="text-xs text-muted-foreground mb-1 block">Quantidade</label>
                       <input type="number" min="0" step="0.001" value={it.quantity} onChange={(e) => updateItem(it.id, { quantity: Number(e.target.value) })} className="w-full h-9 px-3 rounded border border-input bg-background text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary" />
                     </div>
-                    <div className="col-span-4">
+                    <div className="col-span-3">
                       <label className="text-xs text-muted-foreground mb-1 block">Preço unit. (AOA)</label>
                       <input type="number" min="0" step="0.01" value={it.price} onChange={(e) => updateItem(it.id, { price: Number(e.target.value) })} className="w-full h-9 px-3 rounded border border-input bg-background text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary" />
                     </div>
-                    <div className="col-span-4">
+                    <div className="col-span-3">
+                      <label className="text-xs text-muted-foreground mb-1 block">Desc %</label>
+                      <input type="number" min="0" max="100" step="0.01" value={it.discount ?? 0} onChange={(e) => updateItem(it.id, { discount: Number(e.target.value) })} className="w-full h-9 px-3 rounded border border-input bg-background text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary" />
+                    </div>
+                    <div className="col-span-3">
                       <label className="text-xs text-muted-foreground mb-1 block">IVA %</label>
                       <input type="number" min="0" max="100" step="0.01" value={taxExempt ? 0 : it.tax_rate} disabled={taxExempt} onChange={(e) => updateItem(it.id, { tax_rate: Number(e.target.value) })} className="w-full h-9 px-3 rounded border border-input bg-background text-sm font-mono disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-primary" />
                     </div>
                   </div>
                   <div className="mt-2 text-right text-xs text-muted-foreground">
-                    Total linha: <span className="font-mono font-semibold text-foreground">{formatAOA((Number(it.quantity)||0) * (Number(it.price)||0) * (1 + (taxExempt ? 0 : (Number(it.tax_rate)||0)) / 100))}</span>
+                    Total linha: <span className="font-mono font-semibold text-foreground">{formatAOA(((Number(it.quantity)||0) * (Number(it.price)||0) * (1 - (Number(it.discount)||0)/100)) * (1 + (taxExempt ? 0 : (Number(it.tax_rate)||0)) / 100))}</span>
                   </div>
                 </div>
               ))}
@@ -356,8 +365,8 @@ export default function NewInvoiceView() {
         <div className="lg:col-span-1">
           <div className="ms-card p-5 lg:sticky lg:top-4">
             <h3 className="font-semibold mb-4">Resumo</h3>
-            <div className="space-y-2 text-sm">
               <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span className="font-mono">{formatAOA(totals.subtotal)}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Desconto</span><span className="font-mono text-emerald-600">-{formatAOA(totals.totalDiscount)}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">IVA{taxExempt ? ' (isento)' : ''}</span><span className="font-mono">{formatAOA(totals.tax)}</span></div>
               {applyRetention && (
                 <div className="flex justify-between text-destructive"><span>Retenção (IRT 6.5%)</span><span className="font-mono">-{formatAOA(totals.retentionTax)}</span></div>
