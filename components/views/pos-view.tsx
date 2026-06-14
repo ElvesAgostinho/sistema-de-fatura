@@ -713,10 +713,11 @@ function ShiftHistoryModal({
 
 /* ─── SessionModal — Abrir Caixa ──────────────────────────────────────────── */
 function SessionModal({
-  onOpen, onClose, isCaixa = false,
+  onOpen, onClose, onCancel, isCaixa = false,
 }: {
   onOpen: (n: string, b: number) => void;
   onClose: () => void;
+  onCancel?: () => void;
   isCaixa?: boolean;
 }) {
   const [name,    setName]    = useState('Caixa 1');
@@ -783,10 +784,10 @@ function SessionModal({
     <div
       className="fixed inset-0 z-[200] flex items-center justify-center p-4"
       style={{ background: 'rgba(9,60,90,0.9)', backdropFilter: 'blur(8px)' }}
-      onClick={isCaixa ? undefined : onClose}
+      onClick={isCaixa ? undefined : (onCancel || onClose)}
     >
       <div
-        className="w-full max-w-4xl bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col relative"
+        className="w-full max-w-4xl max-h-[95vh] bg-white rounded-3xl shadow-2xl overflow-y-auto flex flex-col relative"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -851,7 +852,7 @@ function SessionModal({
 
             <div className="mt-auto pt-4">
                <button
-                onClick={onClose}
+                onClick={onCancel || onClose}
                 className="w-full py-4 rounded-xl text-sm font-bold border transition-colors hover:bg-slate-50 text-slate-500 border-slate-200"
               >
                 Voltar ao Dashboard
@@ -1851,7 +1852,6 @@ export default function POSView() {
       const j = await r.json();
       if (!r.ok) { toast.error(j.error); return; }
       setSession(j.session);
-      setShowSession(false);
       toast.success(`Caixa "${name}" aberta!`);
     } catch { toast.error('Erro ao abrir sessão'); }
   };
@@ -2455,9 +2455,10 @@ export default function POSView() {
       {showSession && (
         <SessionModal
           onOpen={openSession}
-          onClose={() => {
+          onClose={() => setShowSession(false)}
+          onCancel={() => {
             setShowSession(false);
-            if (!session) router.push('/dashboard');
+            router.push('/dashboard');
           }}
           isCaixa={false}
         />
