@@ -61,13 +61,18 @@ export async function GET(req: Request) {
       endTime = now.toISOString();
     }
 
-    // Fetch invoices in the session time window
+    // Fetch invoices in the session
     let invoiceQuery = admin
       .from('invoices')
       .select('id, total, subtotal, tax, status, document_type, payment_status')
-      .eq('company_id', companyId)
-      .gte('issued_at', startTime);
-    if (endTime) invoiceQuery = invoiceQuery.lte('issued_at', endTime);
+      .eq('company_id', companyId);
+
+    if (sessionId) {
+      invoiceQuery = invoiceQuery.eq('session_id', sessionId);
+    } else {
+      invoiceQuery = invoiceQuery.gte('issued_at', startTime);
+      if (endTime) invoiceQuery = invoiceQuery.lte('issued_at', endTime);
+    }
 
     const { data: invoices } = await invoiceQuery;
 
@@ -78,13 +83,18 @@ export async function GET(req: Request) {
     const taxTotal      = issued.reduce((s, i) => s + Number(i.tax || 0), 0);
     const subtotalSum   = issued.reduce((s, i) => s + Number(i.subtotal || 0), 0);
 
-    // Fetch payments in window
+    // Fetch payments in session
     let payQuery = admin
       .from('payments')
       .select('id, amount, method')
-      .eq('company_id', companyId)
-      .gte('payment_date', startTime);
-    if (endTime) payQuery = payQuery.lte('payment_date', endTime);
+      .eq('company_id', companyId);
+
+    if (sessionId) {
+      payQuery = payQuery.eq('session_id', sessionId);
+    } else {
+      payQuery = payQuery.gte('payment_date', startTime);
+      if (endTime) payQuery = payQuery.lte('payment_date', endTime);
+    }
 
     const { data: payments } = await payQuery;
 
@@ -99,6 +109,23 @@ export async function GET(req: Request) {
       const method = p.method as string;
       if (method in breakdown) breakdown[method] += amt;
       else breakdown['Outro'] += amt;
+    });
+
+    // Fetch cash events (Reforços e Sangrias)
+    let eventsQuery = admin.from('pos_cash_events').select('type, amount').eq('company_id', companyId);
+    if (sessionId) {
+      eventsQuery = eventsQuery.eq('session_id', sessionId);
+    } else {
+      eventsQuery = eventsQuery.gte('created_at', startTime);
+      if (endTime) eventsQuery = eventsQuery.lte('created_at', endTime);
+    }
+    const { data: cashEvents } = await eventsQuery;
+
+    let totalIn = 0;
+    let totalOut = 0;
+    (cashEvents || []).forEach(ev => {
+      if (ev.type === 'IN') totalIn += Number(ev.amount || 0);
+      if (ev.type === 'OUT') totalOut += Number(ev.amount || 0);
     });
 
     // If session has stored totals (from increment_pos_session RPC), prefer those
@@ -120,7 +147,7 @@ export async function GET(req: Request) {
 
     const openingBalance  = Number(session?.opening_balance ?? 0);
     const closingBalance  = Number(session?.closing_balance ?? 0);
-    const expectedInCash  = openingBalance + sessionTotals.total_cash;
+    const expectedInCash  = openingBalance + sessionTotals.total_cash + totalIn - totalOut;
     const difference      = closingBalance - expectedInCash;
 
     // Next Z-Report number for this company
@@ -149,6 +176,10 @@ export async function GET(req: Request) {
         breakdown,
       },
       session_totals:   sessionTotals,
+      cash_events: {
+        total_in: totalIn,
+        total_out: totalOut,
+      },
       reconciliation: {
         opening_balance:  openingBalance,
         closing_balance:  closingBalance,

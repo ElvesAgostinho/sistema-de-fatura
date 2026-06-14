@@ -24,6 +24,7 @@ interface CloseData {
   invoices: { total_issued: number; total_cancelled: number; total_amount: number; subtotal: number; tax_total: number };
   payments: { total_received: number; breakdown: Record<string, number> };
   session_totals: { total_cash: number; total_multicaixa: number; total_tpa: number; total_credit: number; total_sales: number; sales_count: number };
+  cash_events: { total_in: number; total_out: number };
   reconciliation: { opening_balance: number; closing_balance: number; expected_in_cash: number; difference: number };
 }
 
@@ -256,11 +257,11 @@ export default function PosCloseView() {
 
           <div className="border-t border-dashed border-gray-300 pt-3">
             <div className="font-bold text-xs uppercase tracking-wider mb-2 flex items-center gap-1">
-              <Banknote className="w-3.5 h-3.5" /> Recebimentos por Método
+              <Banknote className="w-3.5 h-3.5" /> Movimentos de Gaveta
             </div>
             <div className="space-y-1 text-xs">
               {[
-                { label: 'Dinheiro (Numerário)', value: data?.session_totals?.total_cash ?? 0 },
+                { label: 'Dinheiro (Vendas)', value: data?.session_totals?.total_cash ?? 0 },
                 { label: 'Multicaixa', value: data?.session_totals?.total_multicaixa ?? 0 },
                 { label: 'TPA', value: data?.session_totals?.total_tpa ?? 0 },
                 { label: 'Crédito / Outro', value: data?.session_totals?.total_credit ?? 0 },
@@ -270,6 +271,15 @@ export default function PosCloseView() {
                   <span className="font-bold">{formatAOA(row.value)}</span>
                 </div>
               ))}
+              <div className="border-t border-dashed border-gray-200 my-1 pt-1" />
+              <div className="flex justify-between text-sky-600">
+                <span>(+) Reforços de Caixa:</span>
+                <span className="font-bold">{formatAOA(data?.cash_events?.total_in ?? 0)}</span>
+              </div>
+              <div className="flex justify-between text-red-600">
+                <span>(-) Sangrias de Caixa:</span>
+                <span className="font-bold">{formatAOA(data?.cash_events?.total_out ?? 0)}</span>
+              </div>
             </div>
           </div>
 

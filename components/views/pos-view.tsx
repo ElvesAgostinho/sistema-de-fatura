@@ -713,15 +713,16 @@ function ShiftHistoryModal({
 
 /* ─── SessionModal — Abrir Caixa ──────────────────────────────────────────── */
 function SessionModal({
-  onOpen, onClose, onCancel, isCaixa = false,
+  onOpen, onClose, onCancel, isCaixa = false, fixedOpeningBalance = null
 }: {
   onOpen: (n: string, b: number) => void;
   onClose: () => void;
   onCancel?: () => void;
   isCaixa?: boolean;
+  fixedOpeningBalance?: number | null;
 }) {
   const [name,    setName]    = useState('Caixa 1');
-  const [balance, setBalance] = useState('');
+  const [balance, setBalance] = useState(fixedOpeningBalance !== null ? String(fixedOpeningBalance) : '');
   const [opening, setOpening] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -737,6 +738,7 @@ function SessionModal({
   const NUMPAD        = ['7','8','9','4','5','6','1','2','3','000','0','⌫'];
 
   const numpadPress = (val: string) => {
+    if (fixedOpeningBalance !== null) return; // Prevent changing if fixed
     if ('vibrate' in navigator) navigator.vibrate(20);
     setBalance(prev => {
       if (val === '⌫') return prev.slice(0, -1);
@@ -879,8 +881,9 @@ function SessionModal({
                 {QUICK_AMOUNTS.map(a => (
                   <button
                     key={a}
-                    onClick={() => { if('vibrate' in navigator) navigator.vibrate(20); setBalance(String(a)); }}
+                    onClick={() => { if (fixedOpeningBalance !== null) return; if('vibrate' in navigator) navigator.vibrate(20); setBalance(String(a)); }}
                     className="py-4 rounded-xl text-sm font-black border transition-all active:scale-95 bg-white hover:bg-[#25b7e8]/5 text-[#0b4a6f] border-[#25b7e8]/20"
+                    style={{ opacity: fixedOpeningBalance !== null ? 0.5 : 1, cursor: fixedOpeningBalance !== null ? 'not-allowed' : 'pointer' }}
                   >
                     {a >= 1000 ? `${a / 1000}k` : a}
                   </button>
@@ -898,6 +901,8 @@ function SessionModal({
                       borderColor: k === '⌫' ? '#fca5a5' : '#e2e8f0',
                       color:       k === '⌫' ? '#ef4444' : '#1e293b',
                       minHeight:   '60px',
+                      opacity: fixedOpeningBalance !== null ? 0.5 : 1, 
+                      cursor: fixedOpeningBalance !== null ? 'not-allowed' : 'pointer'
                     }}
                   >
                     {k}
@@ -1401,6 +1406,76 @@ function TouchActionBar({
   );
 }
 
+/* ─── CashEventModal ──────────────────────────────────────────────────────── */
+function CashEventModal({
+  sessionId, type, onClose, onSuccess
+}: {
+  sessionId: string; type: 'IN' | 'OUT'; onClose: () => void; onSuccess: () => void;
+}) {
+  const [amount, setAmount] = useState('');
+  const [notes, setNotes] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!amount || Number(amount) <= 0) { toast.error('Insira um valor válido'); return; }
+    
+    setLoading(true);
+    try {
+      const res = await fetch('/api/pos/cash-events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId, type, amount: Number(amount), notes }),
+      });
+      const j = await res.json();
+      if (j.error) throw new Error(j.error);
+      
+      toast.success(type === 'IN' ? 'Reforço registado' : 'Sangria registada');
+      onSuccess();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className={`px-6 py-4 flex items-center gap-3 ${type === 'IN' ? 'bg-[#0b4a6f]' : 'bg-red-600'}`}>
+          {type === 'IN' ? <Plus className="w-6 h-6 text-white" /> : <Minus className="w-6 h-6 text-white" />}
+          <h3 className="text-white font-black text-xl">{type === 'IN' ? 'Reforço de Caixa' : 'Sangria de Caixa'}</h3>
+        </div>
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Valor (Kz)</label>
+            <input 
+              type="number" min="1" step="0.01" 
+              value={amount} onChange={e => setAmount(e.target.value)} 
+              className="w-full border-2 rounded-xl px-4 py-3 text-2xl font-black text-right focus:outline-none focus:border-[#0b4a6f]"
+              autoFocus required 
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Motivo / Notas</label>
+            <input 
+              type="text" value={notes} onChange={e => setNotes(e.target.value)}
+              className="w-full border-2 rounded-xl px-4 py-3 focus:outline-none focus:border-[#0b4a6f]"
+              placeholder="Ex: Trocos, Retirada para pagamento..."
+            />
+          </div>
+          <div className="pt-2 flex gap-3">
+            <button type="button" onClick={onClose} disabled={loading} className="flex-1 py-3 rounded-xl font-bold border border-slate-200 text-slate-600 hover:bg-slate-50">Cancelar</button>
+            <button type="submit" disabled={loading} className={`flex-1 py-3 rounded-xl font-black text-white ${type === 'IN' ? 'bg-[#0b4a6f]' : 'bg-red-600'}`}>
+              {loading ? <Loader2 className="w-5 h-5 mx-auto animate-spin" /> : 'Confirmar'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Main POSView ────────────────────────────────────────────────────────── */
 export default function POSView() {
   const router = useRouter();
@@ -1426,6 +1501,11 @@ export default function POSView() {
   const [companyInfo,     setCompanyInfo]     = useState<any>(null);
   const [online,          setOnline]          = useState(true);
   const [printerOk,       setPrinterOk]       = useState(false);
+
+  /* Cash Events & Opening */
+  const [fixedOpeningBalance, setFixedOpeningBalance] = useState<number | null>(null);
+  const [cashEvents, setCashEvents] = useState({ total_in: 0, total_out: 0 });
+  const [showCashEventModal, setShowCashEventModal] = useState<'IN' | 'OUT' | null>(null);
 
   /* Touch mode */
   const [touchMode,       setTouchMode]       = useState(false);
@@ -1676,7 +1756,14 @@ export default function POSView() {
     try {
       const [sR, cR] = await Promise.all([fetch('/api/pos/session'), fetch('/api/company')]);
       const [sJ, cJ] = await Promise.all([sR.json(), cR.json()]);
-      if (sJ.session) { setSession(sJ.session); hasSession = true; }
+      if (sJ.session) { 
+        setSession(sJ.session); 
+        hasSession = true; 
+        if (sJ.cash_events) setCashEvents(sJ.cash_events);
+      }
+      if (sJ.fixed_opening_balance !== undefined) {
+        setFixedOpeningBalance(sJ.fixed_opening_balance);
+      }
       if (cJ.company) setCompanyInfo(cJ.company);
     } catch {}
 
@@ -2028,9 +2115,22 @@ export default function POSView() {
               <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: XERO.success }} />
               {session.terminal_name}
             </span>
+            <div className="flex items-center gap-1 ml-2 bg-white/5 rounded-lg px-2 py-1 border border-white/10 hidden lg:flex">
+              <Banknote className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="text-[11px] font-mono text-emerald-100 font-bold ml-1">
+                {kz(Number(session.opening_balance ?? 0) + Number(session.total_cash ?? 0) + cashEvents.total_in - cashEvents.total_out)}
+              </span>
+              <div className="w-px h-3 bg-white/20 mx-1" />
+              <button onClick={() => setShowCashEventModal('IN')} title="Reforço de Caixa" className="hover:bg-white/10 p-1 rounded">
+                <Plus className="w-3 h-3 text-sky-400" />
+              </button>
+              <button onClick={() => setShowCashEventModal('OUT')} title="Sangria de Caixa" className="hover:bg-white/10 p-1 rounded">
+                <Minus className="w-3 h-3 text-red-400" />
+              </button>
+            </div>
             <button
               onClick={() => setShowHistory(true)}
-              className="flex items-center gap-1.5 text-[11px] font-bold px-3 py-1 rounded-full ml-2 transition-opacity hover:opacity-80"
+              className="flex items-center gap-1.5 text-[11px] font-bold px-3 py-1 rounded-full ml-2 transition-opacity hover:opacity-80 hidden md:flex"
               style={{ background: '#25b7e820', color: '#13b5ea', border: '1px solid #25b7e840' }}
             >
               <ClipboardList className="w-3 h-3" />
@@ -2461,6 +2561,19 @@ export default function POSView() {
             router.push('/dashboard');
           }}
           isCaixa={false}
+          fixedOpeningBalance={fixedOpeningBalance}
+        />
+      )}
+
+      {showCashEventModal && session && (
+        <CashEventModal
+          sessionId={session.id}
+          type={showCashEventModal}
+          onClose={() => setShowCashEventModal(null)}
+          onSuccess={() => {
+            setShowCashEventModal(null);
+            loadData(); // refresh session data to update cash balance
+          }}
         />
       )}
       {showDiscount && (

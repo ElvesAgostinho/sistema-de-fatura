@@ -152,6 +152,7 @@ export async function POST(req: Request) {
         created_by:    ctx.user.id,
         issued_at:     issuedAt,
         notes:         notes ?? null,
+        session_id:    session_id ?? null,
       }).select().single();
 
       if (insErr) {

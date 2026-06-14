@@ -33,7 +33,37 @@ export async function GET(req: Request) {
     if (terminal) query = query.eq('terminal_name', terminal);
 
     const { data: session } = await query.limit(1).maybeSingle();
-    return ApiResponse.success({ session: session ?? null });
+
+    let fixed_opening_balance = null;
+    const { data: config } = await admin
+      .from('fiscal_config')
+      .select('pos_fixed_opening_balance')
+      .eq('company_id', ctx.profile.company_id)
+      .maybeSingle();
+      
+    if (config?.pos_fixed_opening_balance !== null) {
+      fixed_opening_balance = config?.pos_fixed_opening_balance;
+    }
+
+    let total_in = 0;
+    let total_out = 0;
+    if (session) {
+      const { data: events } = await admin
+        .from('pos_cash_events')
+        .select('type, amount')
+        .eq('session_id', session.id);
+        
+      (events || []).forEach(e => {
+        if (e.type === 'IN') total_in += Number(e.amount);
+        if (e.type === 'OUT') total_out += Number(e.amount);
+      });
+    }
+
+    return ApiResponse.success({ 
+      session: session ?? null, 
+      fixed_opening_balance,
+      cash_events: { total_in, total_out }
+    });
   } catch (err: any) {
     return ApiResponse.error(err?.message, 500);
   }
