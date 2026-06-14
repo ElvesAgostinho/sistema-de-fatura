@@ -23,7 +23,7 @@ export async function GET(req: Request) {
   const fetchProducts = async () => {
     let q = admin
       .from('products')
-      .select('id, name, description, price, tax_rate, sku, track_stock, quantity_in_stock, stock_alert_threshold, is_active, created_at')
+      .select('id, name, description, price, tax_rate, sku, track_stock, quantity_in_stock, stock_alert_threshold, is_active, created_at, product_type')
       .eq('company_id', companyId);
 
     if (!includeInactive) q = q.eq('is_active', true);
@@ -54,7 +54,7 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json();
-    const { name, description, price, tax_rate, sku, track_stock, quantity_in_stock, stock_alert_threshold } = body ?? {};
+    const { name, description, price, tax_rate, sku, track_stock, quantity_in_stock, stock_alert_threshold, product_type } = body ?? {};
     if (!name || price == null) return ApiResponse.error('Nome e preço obrigatórios');
 
     const p = Number(price);
@@ -66,10 +66,11 @@ export async function POST(req: Request) {
       company_id: ctx.profile.company_id,
       name, description: description ?? null, price: p, tax_rate: t,
       sku: sku ?? null,
-      track_stock: !!track_stock,
+      product_type: product_type === 'S' ? 'S' : 'P',
+      track_stock: product_type === 'S' ? false : !!track_stock,
       is_active: true,
     };
-    if (track_stock) {
+    if (payload.track_stock) {
       payload.quantity_in_stock = Number(quantity_in_stock ?? 0);
       payload.stock_alert_threshold = Number(stock_alert_threshold ?? 0);
     }

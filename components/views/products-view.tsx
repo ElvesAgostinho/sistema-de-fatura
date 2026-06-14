@@ -49,7 +49,7 @@ export default function ProductsView() {
         if (!hay.includes(s)) return false;
       }
       if (taxFilter !== '' && Number(p.tax_rate) !== Number(taxFilter)) return false;
-      if (typeFilter !== '' && (p.product_type ?? 'S') !== typeFilter) return false;
+      if (typeFilter !== '' && (p.product_type ?? 'P') !== typeFilter) return false;
       if (stockFilter === 'low') {
         if (!p.track_stock) return false;
         if (Number(p.quantity_in_stock ?? 0) > Number(p.stock_alert_threshold ?? 0)) return false;
@@ -57,7 +57,7 @@ export default function ProductsView() {
       if (stockFilter === 'tracked' && !p.track_stock) return false;
       return true;
     });
-  }, [all, search, taxFilter, stockFilter]);
+  }, [all, search, taxFilter, stockFilter, typeFilter]);
 
   const hasFilters = Boolean(search || taxFilter || stockFilter || typeFilter);
   const clearFilters = () => { setSearch(''); setTaxFilter(''); setStockFilter(''); setTypeFilter(''); };
@@ -93,7 +93,7 @@ export default function ProductsView() {
   const exportCols = useMemo(() => ([
     { header: 'Nome', accessor: (p: Product) => p.name },
     { header: 'SKU', accessor: (p: Product) => p.sku ?? '' },
-    { header: 'Tipo', accessor: (p: Product) => p.product_type ?? 'S' },
+    { header: 'Tipo', accessor: (p: Product) => p.product_type ?? 'P' },
     { header: 'Descrição', accessor: (p: Product) => p.description ?? '' },
     { header: 'Preço', accessor: (p: Product) => p.price },
     { header: 'IVA %', accessor: (p: Product) => p.tax_rate },
@@ -237,7 +237,7 @@ export default function ProductsView() {
                               E: { label: 'Encargos',color: 'bg-amber-50 text-amber-700' },
                               I: { label: 'Imobil.', color: 'bg-green-50 text-green-700' },
                             };
-                            const t = types[p.product_type ?? 'S'] ?? types['S'];
+                            const t = types[p.product_type ?? 'P'] ?? types['P'];
                             return <span className={`inline-flex text-[10px] font-bold px-1.5 py-0.5 rounded ${t.color}`}>{t.label}</span>;
                           })()}
                         </td>

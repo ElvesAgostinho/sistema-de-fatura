@@ -25,7 +25,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
 
   try {
     const body = await req.json();
-    const { name, description, price, tax_rate, sku, track_stock, quantity_in_stock, stock_alert_threshold } = body ?? {};
+    const { name, description, price, tax_rate, sku, track_stock, quantity_in_stock, stock_alert_threshold, product_type } = body ?? {};
     if (!name) return NextResponse.json({ error: 'Nome obrigatório' }, { status: 400 });
     if (price == null || Number(price) < 0) return NextResponse.json({ error: 'Preço inválido' }, { status: 400 });
 
@@ -39,11 +39,15 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
       price: Number(price),
       tax_rate: Number(tax_rate ?? 14),
       sku: sku ?? null,
-      track_stock: !!track_stock,
+      product_type: product_type === 'S' ? 'S' : 'P',
+      track_stock: product_type === 'S' ? false : !!track_stock,
     };
-    if (track_stock) {
+    if (update.track_stock) {
       update.quantity_in_stock = Number(quantity_in_stock ?? 0);
       update.stock_alert_threshold = Number(stock_alert_threshold ?? 0);
+    } else {
+      update.quantity_in_stock = 0;
+      update.stock_alert_threshold = 0;
     }
 
     const { data, error } = await admin.from('products').update(update)

@@ -76,6 +76,8 @@ export async function POST(req: Request) {
     const description = pick(row, ['description', 'descricao', 'descrição', 'detalhes', 'observacoes']);
     const price = pickNumber(row, ['price', 'preco', 'preço', 'valor', 'unit_price', 'preco_unitario', 'pvp']);
     const taxRate = pickNumber(row, ['tax_rate', 'iva', 'taxa_iva', 'vat', 'tax']);
+    const rawType = pick(row, ['type', 'tipo', 'product_type', 'tipo_produto']) ?? 'P';
+    const productType = rawType.trim().toUpperCase().startsWith('S') ? 'S' : 'P';
 
     if (!name) {
       result.errors.push({ row: rowNumber, name: null, reason: 'Nome em falta' });
@@ -105,7 +107,7 @@ export async function POST(req: Request) {
       }
       const { error } = await admin
         .from('products')
-        .update({ description, price, tax_rate: finalTaxRate })
+        .update({ description, price, tax_rate: finalTaxRate, product_type: productType })
         .eq('id', existingId)
         .eq('company_id', ctx.profile.company_id);
       if (error) {
@@ -117,7 +119,7 @@ export async function POST(req: Request) {
     } else {
       const { data: ins, error } = await admin
         .from('products')
-        .insert({ company_id: ctx.profile.company_id, name, description, price, tax_rate: finalTaxRate })
+        .insert({ company_id: ctx.profile.company_id, name, description, price, tax_rate: finalTaxRate, product_type: productType })
         .select('id')
         .single();
       if (error) {
