@@ -93,6 +93,17 @@ export default function NewInvoiceView() {
     updateItem(id, { description: p.name + (p.description ? ` - ${p.description}` : ''), price: Number(p.price), tax_rate: Number(p.tax_rate), product_id: p.id });
   };
 
+  const onClientSaved = (c: any) => {
+    mutateClients((prev: any) => prev ? { clients: [c, ...prev.clients] } : { clients: [c] });
+    setClientId(c.id);
+    setClientModal(false);
+  };
+
+  const onProductSaved = (p: any) => {
+    mutateProducts((prev: any) => prev ? { products: [p, ...prev.products] } : { products: [p] });
+    setProductModal(null);
+  };
+
   const onSubmit = async () => {
     if (!clientId) { toast.error('Selecione um cliente'); return; }
     if (items.length === 0) { toast.error('Adicione pelo menos um item'); return; }
@@ -375,7 +386,6 @@ export default function NewInvoiceView() {
               <div className="h-px bg-border my-2" />
               <div className="flex justify-between text-base font-bold"><span>Total a Pagar</span><span className="font-mono text-primary">{formatAOA(totals.total)}</span></div>
             </div>
-          </div>
             <button onClick={onSubmit} disabled={submitting} className="mt-5 w-full ms-btn-primary justify-center h-11 disabled:opacity-60">
               {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Emitir {DOC_TYPES.find(d=>d.value===docType)?.label.replace(/ \(.+\)/, '') ?? 'documento'}</>}
             </button>
@@ -384,8 +394,8 @@ export default function NewInvoiceView() {
         </div>
       </div>
 
-      {clientModal && <ClientModal onClose={() => setClientModal(false)} onSaved={(c) => { mutateClients((prev) => prev ? { clients: [c, ...prev.clients] } : { clients: [c] }); setClientId(c.id); setClientModal(false); }} />}
-      {productModal && <ProductModal onClose={() => setProductModal(null)} onSaved={(p) => { mutateProducts((prev) => prev ? { products: [p, ...prev.products] } : { products: [p] }); setProductModal(null); }} />}
+      {clientModal && <ClientModal onClose={() => setClientModal(false)} onSaved={onClientSaved} />}
+      {productModal && <ProductModal onClose={() => setProductModal(null)} onSaved={onProductSaved} />}
     </div>
   );
 }
