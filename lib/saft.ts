@@ -195,6 +195,8 @@ export interface SaftInvoice {
   client_nif: string;
   client_name: string;
   related_document?: string | null;
+  original_invoice_number?: string | null;
+  original_issued_at?: string | Date | null;
   tax_exempt?: boolean;
   tax_exemption_reason?: string | null;
   items: SaftInvoiceItem[];
@@ -423,8 +425,9 @@ ${taxTable}
 
       // FIX: <References> em TODAS as linhas de NC/ND, não só na linha 0
       const hasRef = (isCreditNote || isDebitNote) && inv.related_document;
+      const origOn = inv.original_invoice_number || inv.related_document;
       const lineReferences = hasRef
-        ? `\n          <References>\n            <Reference>\n              <OriginatingON>${esc(inv.related_document)}</OriginatingON>\n              <Reason>${esc(inv.cancellation_reason || `${isCreditNote ? 'Nota de crédito' : 'Nota de débito'} referente a ${inv.related_document}`)}</Reason>\n            </Reference>\n          </References>`
+        ? `\n          <References>\n            <Reference>\n              <OriginatingON>${esc(origOn)}</OriginatingON>\n              <Reason>${esc(inv.cancellation_reason || `${isCreditNote ? 'Nota de crédito' : 'Nota de débito'} referente a ${origOn}`)}</Reason>\n            </Reference>\n          </References>`
         : '';
 
       // FIX: UnitOfMeasure usa campo da BD quando disponível
@@ -486,6 +489,81 @@ ${itemLines}
       </Invoice>`;
   }).join('\n');
 
+  /* ---------- WorkingDocuments (PP) ---------- */
+  const WORK_TYPES = new Set(['PP']);
+  const workingList = invoices.filter(inv => WORK_TYPES.has((inv.document_type || '').toUpperCase()));
+  const totalWorkingCredit = workingList
+    .filter(inv => inv.status !== 'cancelled')
+    .reduce((acc, inv) => acc + Number(inv.total), 0);
+
+  const workEntries = workingList.map(inv => {
+    const isCancelled = inv.status === 'cancelled';
+    const docType = (inv.document_type || 'PP').toUpperCase();
+    const hashVal = inv.signature || (inv.hash && String(inv.hash).length >= 8 ? String(inv.hash) : '0');
+
+    const itemLines = (inv.items || []).map((it, idx) => {
+      const key = String(it.description || '').trim().toLowerCase();
+      const prodCode = productMap.get(key)?.code ?? slugCode(it.description);
+      const rate = Number(it.tax_rate);
+      const taxCode = rate === 0 ? 'ISE' : 'NOR';
+      const lineTotal = Number(it.total);
+      const lineSub = +(lineTotal / (1 + rate / 100)).toFixed(2);
+      const taxAmount = +(lineTotal - lineSub).toFixed(2);
+
+      const exemptionInfo = rate === 0 ? getExemptionInfo(it.tax_exemption_reason || inv.tax_exemption_reason) : null;
+      const exemption = exemptionInfo
+        ? `\n            <TaxExemptionReason>${esc(exemptionInfo.reason)}</TaxExemptionReason>\n            <TaxExemptionCode>${esc(exemptionInfo.code)}</TaxExemptionCode>`
+        : '';
+      const unitMeasure = it.unit_of_measure || 'UN';
+
+      return `        <Line>
+          <LineNumber>${idx + 1}</LineNumber>
+          <ProductCode>${esc(prodCode)}</ProductCode>
+          <ProductDescription>${esc(it.description)}</ProductDescription>
+          <Quantity>${qty(it.quantity)}</Quantity>
+          <UnitOfMeasure>${esc(unitMeasure)}</UnitOfMeasure>
+          <UnitPrice>${money(it.price)}</UnitPrice>
+          <TaxPointDate>${isoDate(inv.issued_at)}</TaxPointDate>
+          <Description>${esc(it.description)}</Description>
+          <CreditAmount>${money(it.total)}</CreditAmount>
+          <Tax>
+            <TaxType>IVA</TaxType>
+            <TaxCountryRegion>AO</TaxCountryRegion>
+            <TaxCode>${taxCode}</TaxCode>
+            <TaxPercentage>${pct(it.tax_rate)}</TaxPercentage>
+            <TaxAmount>${money(taxAmount)}</TaxAmount>
+          </Tax>${exemption}
+        </Line>`;
+    }).join('\n');
+
+    const statusDate = isCancelled && inv.cancelled_at ? isoDateTime(inv.cancelled_at) : isoDateTime(inv.issued_at);
+    const reason = isCancelled && inv.cancellation_reason ? inv.cancellation_reason : '';
+
+    return `      <WorkDocument>
+        <DocumentNumber>${esc(inv.invoice_number)}</DocumentNumber>
+        <DocumentStatus>
+          <WorkStatus>${isCancelled ? 'A' : 'N'}</WorkStatus>
+          <WorkStatusDate>${statusDate}</WorkStatusDate>${reason ? `\n          <Reason>${esc(reason)}</Reason>` : ''}
+          <SourceID>${esc(inv.operator_name || company.nif)}</SourceID>
+          <SourceBilling>${saftMode}</SourceBilling>
+        </DocumentStatus>
+        <Hash>${esc(hashVal)}</Hash>
+        <HashControl>${hashControlVersion}</HashControl>
+        <Period>${new Date(inv.issued_at).getUTCMonth() + 1}</Period>
+        <WorkDate>${isoDate(inv.issued_at)}</WorkDate>
+        <WorkType>${esc(docType)}</WorkType>
+        <SourceID>${esc(inv.operator_name || company.nif)}</SourceID>
+        <SystemEntryDate>${isoDateTime(inv.issued_at)}</SystemEntryDate>
+        <CustomerID>${esc(inv.client_nif)}</CustomerID>
+${itemLines}
+        <DocumentTotals>
+          <TaxPayable>${money(inv.tax)}</TaxPayable>
+          <NetTotal>${money(inv.subtotal)}</NetTotal>
+          <GrossTotal>${money(inv.total)}</GrossTotal>
+        </DocumentTotals>
+      </WorkDocument>`;
+  }).join('\n');
+
   /* ---------- Payments (RC — Recibos) --- AGT: secção separada ---------- */
   const paymentEntries = paymentsList.map(inv => {
     const isCancelled = inv.status === 'cancelled';
@@ -511,8 +589,8 @@ ${itemLines}
         <Line>
           <LineNumber>1</LineNumber>
           <SourceDocumentID>
-            <OriginatingON>${esc(inv.related_document || inv.invoice_number)}</OriginatingON>
-            <InvoiceDate>${isoDate(inv.issued_at)}</InvoiceDate>
+            <OriginatingON>${esc(inv.original_invoice_number || inv.related_document || inv.invoice_number)}</OriginatingON>
+            <InvoiceDate>${isoDate(inv.original_issued_at || inv.issued_at)}</InvoiceDate>
           </SourceDocumentID>
           <SettlementAmount>${money(inv.total)}</SettlementAmount>
           <CreditAmount>${money(inv.total)}</CreditAmount>
@@ -537,7 +615,7 @@ ${itemLines}
       <TotalDebit>${totalDebit.toFixed(2)}</TotalDebit>
       <TotalCredit>${totalCredit.toFixed(2)}</TotalCredit>
 ${invoiceEntries}
-    </SalesInvoices>${paymentsList.length > 0 ? `\n    <Payments>\n      <NumberOfEntries>${paymentsList.length}</NumberOfEntries>\n      <TotalDebit>0.00</TotalDebit>\n      <TotalCredit>${paymentsList.filter(p => p.status !== 'cancelled').reduce((s, p) => s + Number(p.total), 0).toFixed(2)}</TotalCredit>\n${paymentEntries}\n    </Payments>` : ''}`;
+    </SalesInvoices>${workingList.length > 0 ? `\n    <WorkingDocuments>\n      <NumberOfEntries>${workingList.length}</NumberOfEntries>\n      <TotalDebit>0.00</TotalDebit>\n      <TotalCredit>${totalWorkingCredit.toFixed(2)}</TotalCredit>\n${workEntries}\n    </WorkingDocuments>` : ''}${paymentsList.length > 0 ? `\n    <Payments>\n      <NumberOfEntries>${paymentsList.length}</NumberOfEntries>\n      <TotalDebit>0.00</TotalDebit>\n      <TotalCredit>${paymentsList.filter(p => p.status !== 'cancelled').reduce((s, p) => s + Number(p.total), 0).toFixed(2)}</TotalCredit>\n${paymentEntries}\n    </Payments>` : ''}`;
 
   const sourceDocuments = `  <SourceDocuments>
 ${salesInvoices}

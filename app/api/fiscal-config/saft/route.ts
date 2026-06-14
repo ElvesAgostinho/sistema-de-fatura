@@ -60,7 +60,7 @@ export async function GET(req: Request) {
   const { data: invoices } = await admin
     .from('invoices')
     .select(`
-      invoice_number, document_type, issued_at, status,
+      id, invoice_number, document_type, issued_at, status,
       cancellation_reason, cancelled_at,
       subtotal, tax, total,
       hash, previous_hash, signature,
@@ -75,6 +75,13 @@ export async function GET(req: Request) {
     .gte('issued_at', fromDate.toISOString())
     .lte('issued_at', toDate.toISOString())
     .order('issued_at', { ascending: true });
+
+  const relatedIds = [...new Set((invoices ?? []).map((i: any) => i.related_document).filter(Boolean))];
+  const { data: origInvoices } = relatedIds.length > 0 
+    ? await admin.from('invoices').select('id, invoice_number, issued_at').in('id', relatedIds)
+    : { data: [] };
+  const origInvoiceMap = new Map((origInvoices ?? []).map((i: any) => [i.id, i]));
+
 
   // ── Clients (incluindo city, postal_code, country) ──
   const { data: clients } = await admin
@@ -116,14 +123,19 @@ export async function GET(req: Request) {
       tax_rate: p.tax_rate,
       product_type: p.product_type ?? 'S',
     })),
-    invoices: (invoices ?? []).map((inv: any) => ({
-      ...inv,
-      items: (inv.items ?? []).map((it: any) => ({
-        ...it,
-        unit_of_measure: it.unit_of_measure ?? 'UN',
-        tax_exemption_reason: it.tax_exemption_reason ?? null,
-      })),
-    })),
+    invoices: (invoices ?? []).map((inv: any) => {
+      const orig = inv.related_document ? origInvoiceMap.get(inv.related_document) : null;
+      return {
+        ...inv,
+        original_invoice_number: orig ? orig.invoice_number : null,
+        original_issued_at: orig ? orig.issued_at : null,
+        items: (inv.items ?? []).map((it: any) => ({
+          ...it,
+          unit_of_measure: it.unit_of_measure ?? 'UN',
+          tax_exemption_reason: it.tax_exemption_reason ?? null,
+        })),
+      };
+    }),
     suppliers: (suppliers ?? []).map((s: any) => ({
       id: s.id,
       name: s.name,
