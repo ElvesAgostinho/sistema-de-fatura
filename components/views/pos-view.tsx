@@ -960,6 +960,54 @@ function VoidSaleModal({
   );
 }
 
+/* ─── ProductConsultModal ─────────────────────────────────────────────────── */
+function ProductConsultModal({ product, onClose }: { product: POSProduct, onClose: () => void }) {
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape' || e.key === 'F8' || e.key === 'Enter') onClose(); };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-[250] flex items-center justify-center" style={{ background: 'rgba(9,60,90,0.8)', backdropFilter: 'blur(6px)' }} onClick={onClose}>
+      <div className="w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden" style={{ background: XERO.card }} onClick={e => e.stopPropagation()}>
+        <div className="p-5 flex justify-between items-center" style={{ background: `${XERO.cyan}10`, borderBottom: `1px solid ${XERO.border}` }}>
+          <div className="flex items-center gap-2">
+            <Scan className="w-5 h-5" style={{ color: XERO.cyan }} />
+            <h3 className="font-bold text-sm uppercase tracking-wide" style={{ color: XERO.navy }}>Consulta de Artigo</h3>
+          </div>
+          <button onClick={onClose}><X className="w-5 h-5" style={{ color: XERO.muted }} /></button>
+        </div>
+        <div className="p-6">
+          <p className="text-xl font-black leading-tight mb-2" style={{ color: XERO.text }}>{product.name}</p>
+          <p className="text-xs mb-6 font-mono font-medium" style={{ color: XERO.muted }}>Ref: {product.sku || 'N/D'} • Cód: {(product as any).barcode || 'N/D'}</p>
+          <div className="flex justify-between items-end mb-4">
+            <p className="text-xs font-bold uppercase" style={{ color: XERO.muted }}>Preço (c/ IVA)</p>
+            <p className="text-3xl font-black tabular-nums" style={{ color: XERO.cyan }}>{product.price.toLocaleString('pt-AO', { minimumFractionDigits: 2 })} Kz</p>
+          </div>
+          <div className="flex justify-between items-center py-3" style={{ borderTop: `1px solid ${XERO.border}` }}>
+            <p className="text-sm font-semibold" style={{ color: XERO.text }}>Stock Disponível</p>
+            <div className="text-right">
+              {product.track_stock ? (
+                <span className="px-2.5 py-1 rounded-full text-sm font-bold" style={{ background: (product.quantity_in_stock??0) > 0 ? `${XERO.success}15` : `${XERO.danger}15`, color: (product.quantity_in_stock??0) > 0 ? XERO.success : XERO.danger }}>{product.quantity_in_stock} un</span>
+              ) : (
+                <span className="text-sm font-medium" style={{ color: XERO.muted }}>Não controlado</span>
+              )}
+            </div>
+          </div>
+          <div className="flex justify-between items-center py-3" style={{ borderTop: `1px solid ${XERO.border}` }}>
+            <p className="text-sm font-semibold" style={{ color: XERO.text }}>Imposto (IVA)</p>
+            <p className="text-sm font-bold" style={{ color: XERO.text }}>{product.tax_rate}%</p>
+          </div>
+        </div>
+        <div className="p-4" style={{ background: XERO.bg }}>
+          <button onClick={onClose} className="w-full py-3 rounded-xl font-bold text-white transition-opacity hover:opacity-90" style={{ background: XERO.navy }}>Fechar (Esc)</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── TouchActionBar — Rodapé de ações ────────────────────────────────────── */
 function TouchActionBar({
   touchMode,
@@ -1126,6 +1174,8 @@ export default function POSView() {
 
   /* Suspended cart (pause/resume) */
   const [suspendedCart,   setSuspendedCart]   = useState<POSCartItem[] | null>(null);
+  const [isConsulting,    setIsConsulting]    = useState(false);
+  const [consultedProduct, setConsultedProduct] = useState<POSProduct | null>(null);
 
   const { profile } = useProfile();
   const isCaixa = profile?.role === 'caixa';
@@ -1140,6 +1190,7 @@ export default function POSView() {
   const productsRef     = useRef<POSProduct[]>([]); // always-fresh ref for event handlers
   const sessionRef      = useRef<POSSession | null>(null);
   const addToCartRef    = useRef<(p: POSProduct) => void>(() => {});
+  const isConsultingRef = useRef(false);
 
   /* ── Clock ─────────────────────────────────────────────────────────────── */
   useEffect(() => {
@@ -1206,8 +1257,9 @@ export default function POSView() {
    * listeners without stale-closure issues. Do NOT wrap in useEffect: that
    * would place them BEFORE the variables they reference (TDZ error).
    */
-  productsRef.current = products;
-  sessionRef.current  = session;
+  productsRef.current     = products;
+  sessionRef.current      = session;
+  isConsultingRef.current = isConsulting;
   // addToCartRef is updated right after addToCart is declared (further below)
 
   /* ── Global scanner + keyboard shortcuts (single listener) ──────────────── */
@@ -1236,9 +1288,16 @@ export default function POSView() {
         p => p.sku === code || (p as any).barcode === code
       );
       if (match) {
-        addToCartRef.current(match);
-        setSearch('');
-        toast.success(`✓ ${match.name}`, { duration: 1200 });
+        if (isConsultingRef.current) {
+          setConsultedProduct(match);
+          setIsConsulting(false);
+          setSearch('');
+          vibrate(30);
+        } else {
+          addToCartRef.current(match);
+          setSearch('');
+          toast.success(`✓ ${match.name}`, { duration: 1200 });
+        }
       } else {
         // Show what was scanned in search field so the cashier can see it
         setSearch(code);
@@ -1274,8 +1333,9 @@ export default function POSView() {
         return;
       }
       if (e.key === 'F5') { e.preventDefault(); setCart([]); return; }
+      if (e.key === 'F8') { e.preventDefault(); setIsConsulting(prev => !prev); return; }
       if (e.key === 'F9') { e.preventDefault(); if (lastSale) handlePrint(lastSale); return; }
-      if (e.key === 'Escape') { e.preventDefault(); setShowPayment(false); setShowDiscount(null); return; }
+      if (e.key === 'Escape') { e.preventDefault(); setShowPayment(false); setShowDiscount(null); setIsConsulting(false); return; }
 
       /* ── Ignore if user is typing in a modal / other input ── */
       if (isInput && !isSearchField) return;
@@ -1452,7 +1512,28 @@ export default function POSView() {
   };
 
   /* ── onKeyDown on the search field — Enter is handled by global listener ── */
-  const onSearchKeyDown = (_e: React.KeyboardEvent<HTMLInputElement>) => { /* global handler manages Enter */ };
+  const onSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // If they typed manually and pressed Enter, find the best match
+    if (e.key === 'Enter' && search) {
+      e.preventDefault();
+      const match = products.find(p =>
+        p.sku === search ||
+        (p as any).barcode === search ||
+        p.name.toLowerCase() === search.toLowerCase()
+      );
+      if (match) {
+        if (isConsultingRef.current) {
+          setConsultedProduct(match);
+          setIsConsulting(false);
+        } else {
+          addToCart(match);
+        }
+        setSearch('');
+      } else {
+        toast.error(`Produto não encontrado: "${search}"`, { duration: 2000 });
+      }
+    }
+  };
 
   /* ── Print ─────────────────────────────────────────────────────────────── */
   const handlePrint = async (saleData?: any) => {
@@ -1799,7 +1880,25 @@ export default function POSView() {
                   <X className="w-3.5 h-3.5" />
                 </button>
               )}
+              <button
+                onClick={() => setIsConsulting(p => !p)}
+                className="hidden md:flex absolute right-1 top-1 bottom-1 items-center gap-1.5 px-3 rounded text-xs font-bold transition-colors"
+                style={{
+                  background: isConsulting ? XERO.warning : 'transparent',
+                  color: isConsulting ? '#fff' : XERO.muted,
+                }}
+                title="Consultar Artigo (F8)"
+              >
+                <Scan className="w-4 h-4" />
+                <span>[F8] Consulta</span>
+              </button>
             </div>
+            {isConsulting && (
+              <div className="mt-2 py-1.5 px-3 rounded flex items-center gap-2 text-sm font-bold animate-pulse" style={{ background: `${XERO.warning}15`, color: XERO.warning }}>
+                <Scan className="w-4 h-4" />
+                Modo Consulta activo: passe o artigo pelo scanner.
+              </div>
+            )}
           </div>
 
           {/* Category tabs */}
@@ -2092,6 +2191,13 @@ export default function POSView() {
           isCaixa={isCaixa}
           onClose={() => setShowVoid(false)}
           onVoided={() => { setShowVoid(false); setLastSale(null); }}
+        />
+      )}
+
+      {consultedProduct && (
+        <ProductConsultModal 
+          product={consultedProduct} 
+          onClose={() => setConsultedProduct(null)} 
         />
       )}
     </div>
