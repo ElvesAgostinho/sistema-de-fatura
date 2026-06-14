@@ -837,7 +837,9 @@ function VoidSaleModal({
   const [reason,     setReason]     = useState('');
   const [managerPin, setManagerPin] = useState('');
   const [loading,    setLoading]    = useState(false);
-  const [needPin,    setNeedPin]    = useState(isCaixa);
+  // PIN is ALWAYS required — even admin/gestor must enter supervisor PIN to void a sale.
+  // This prevents accidental or unauthorised voids by anyone who is logged in.
+  const needPin = true;
 
   const kzFmt = (n: number) =>
     `${n.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Kz`;
@@ -846,9 +848,8 @@ function VoidSaleModal({
     if (reason.trim().length < 5) { toast.error('Escreva o motivo (mínimo 5 caracteres)'); return; }
     setLoading(true);
     try {
-      const body: any = { invoice_id: invoiceId, reason: reason.trim() };
-      if (needPin) body.manager_pin = managerPin;
-      const r = await fetch('/api/pos/void', {
+      const body: any = { invoice_id: invoiceId, reason: reason.trim(), manager_pin: managerPin };
+      const r = await fetch('/api/pos/void-sale', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),

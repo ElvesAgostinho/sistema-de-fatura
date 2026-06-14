@@ -32,27 +32,34 @@ export async function POST(req: Request) {
   const role   = ctx.profile.role;
   const userId = ctx.user.id;
 
-  // Se é caixa, verifica PIN do gestor
-  if (role === 'caixa') {
-    if (!manager_pin) {
-      return NextResponse.json({
-        error: 'Operador de caixa precisa de autorização do gestor para anular vendas',
-        requires_manager_pin: true,
-      }, { status: 403 });
-    }
-    // Verifica PIN: procura um gestor/admin com esse PIN na empresa
-    const { data: managers } = await admin
-      .from('users')
-      .select('id, pos_manager_pin')
-      .eq('company_id', ctx.profile.company_id)
-      .in('role', ['admin', 'gestor']);
-
-    const authorized = (managers ?? []).some(m => m.pos_manager_pin && m.pos_manager_pin === String(manager_pin).trim());
-    if (!authorized) {
-      return NextResponse.json({ error: 'PIN de gestor inválido. Chame o responsável.' }, { status: 403 });
-    }
-  } else if (!['admin', 'gestor'].includes(role)) {
+  // PIN de supervisor é SEMPRE obrigatório para anular vendas — independente do role.
+  // Isto garante que mesmo o admin/dono confirma intencionalmente a anulação.
+  if (!['admin', 'gestor', 'caixa'].includes(role)) {
     return NextResponse.json({ error: 'Sem permissão para anular vendas' }, { status: 403 });
+  }
+
+  if (!manager_pin) {
+    return NextResponse.json({
+      error: 'PIN de supervisor obrigatório para anular vendas',
+      requires_manager_pin: true,
+    }, { status: 403 });
+  }
+
+  // Verifica PIN: procura qualquer utilizador da empresa com esse PIN configurado
+  const { data: pinHolders } = await admin
+    .from('users')
+    .select('id, pos_manager_pin, role')
+    .eq('company_id', ctx.profile.company_id)
+    .in('role', ['admin', 'gestor']);
+
+  const authorized = (pinHolders ?? []).some(
+    u => u.pos_manager_pin && u.pos_manager_pin === String(manager_pin).trim()
+  );
+
+  if (!authorized) {
+    return NextResponse.json({
+      error: 'PIN de supervisor inválido. Chame o gestor ou administrador.',
+    }, { status: 403 });
   }
 
   // Busca a fatura
