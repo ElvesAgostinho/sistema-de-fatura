@@ -173,6 +173,7 @@ export interface SaftInvoiceItem {
   total: number | string;
   tax_exemption_reason?: string | null;
   unit_of_measure?: string | null;
+  discount?: number | string | null;
 }
 
 export interface SaftInvoice {
@@ -199,6 +200,7 @@ export interface SaftInvoice {
   original_issued_at?: string | Date | null;
   tax_exempt?: boolean;
   tax_exemption_reason?: string | null;
+  retention_tax?: number | string | null;
   items: SaftInvoiceItem[];
 }
 

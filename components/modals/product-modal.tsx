@@ -11,7 +11,8 @@ type Product = {
   price: number;
   tax_rate: number;
   sku?: string | null;
-  product_type?: string;
+  code?: string | null;
+  product_type?: string | null;
   track_stock?: boolean;
   quantity_in_stock?: number;
   stock_alert_threshold?: number;
@@ -30,6 +31,7 @@ export default function ProductModal({ onClose, onSaved, initial }: {
     price: initial?.price ?? 0,
     tax_rate: initial?.tax_rate ?? 14,
     sku: initial?.sku ?? '',
+    code: initial?.code ?? '',
     track_stock: !!initial?.track_stock,
     quantity_in_stock: initial?.quantity_in_stock ?? 0,
     stock_alert_threshold: initial?.stock_alert_threshold ?? 0,
@@ -61,8 +63,8 @@ export default function ProductModal({ onClose, onSaved, initial }: {
         <form onSubmit={submit} className="p-5 space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Tipo *</label>
-              <select value={form.product_type} onChange={(e) => setForm((p) => ({ ...p, product_type: e.target.value, track_stock: e.target.value === 'S' ? false : p.track_stock }))} className="w-full h-10 px-3 rounded border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+              <label className="text-sm font-medium mb-1 block">Tipo de Artigo</label>
+              <select value={form.product_type ?? ''} onChange={e => setForm({ ...form, product_type: e.target.value })} className="w-full h-10 px-3 rounded border border-input bg-background text-sm">
                 <option value="P">Produto</option>
                 <option value="S">Serviço</option>
               </select>
@@ -72,11 +74,21 @@ export default function ProductModal({ onClose, onSaved, initial }: {
               <input required value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} className="w-full h-10 px-3 rounded border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
             </div>
           </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm font-medium mb-1 block">SKU / Ref Interna (Opcional)</label>
+              <input value={form.sku ?? ''} onChange={e => setForm({ ...form, sku: e.target.value })} className="w-full h-10 px-3 rounded border border-input bg-background text-sm" />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1 block">Cód. Produto AGT (Opcional)</label>
+              <input value={form.code ?? ''} onChange={e => setForm({ ...form, code: e.target.value })} placeholder="Deixar vazio para automático" className="w-full h-10 px-3 rounded border border-input bg-background text-sm" />
+            </div>
+          </div>
+
           <div><label className="text-xs text-muted-foreground mb-1 block">Descrição</label>
             <input value={form.description ?? ''} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} className="w-full h-10 px-3 rounded border border-input bg-background text-sm" /></div>
           <div className="grid grid-cols-2 gap-3">
-            <div><label className="text-xs text-muted-foreground mb-1 block">SKU / código</label>
-              <input value={form.sku ?? ''} onChange={(e) => setForm((p) => ({ ...p, sku: e.target.value }))} className="w-full h-10 px-3 rounded border border-input bg-background text-sm font-mono" /></div>
             <div><label className="text-xs text-muted-foreground mb-1 block">IVA %</label>
               <input type="number" min="0" max="100" step="0.01" value={form.tax_rate} onChange={(e) => setForm((p) => ({ ...p, tax_rate: Number(e.target.value) }))} className="w-full h-10 px-3 rounded border border-input bg-background text-sm font-mono" /></div>
           </div>

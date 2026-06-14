@@ -82,6 +82,7 @@ export interface ReceiptData {
     total: number;
     tax_rate?: number;         // Taxa IVA por artigo (default 14)
     sku?: string;              // Cód/Ref do artigo
+    discount_pct?: number;     // Percentagem de desconto
   }>;
   subtotal: number;
   tax: number;
