@@ -5,12 +5,13 @@ import Image from 'next/image';
 import {
   Save, Upload, Loader2, Building2, ShieldCheck, FileDown,
   Activity, Plug, Users, Palette, Eye, ImageIcon, AlignLeft,
-  AlignCenter, AlignRight, Layers,
+  AlignCenter, AlignRight, Layers, Receipt,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import CertificationPanel    from './certification-panel';
 import SaftExportPanel        from './saft-export-panel';
 import SystemAuditPanel       from './system-audit-panel';
+import BillingRulesPanel      from './billing-rules-panel';
 import ErpIntegrationPanel    from './erp-integration-panel';
 import UserManagementPanel    from './user-management-panel';
 import PanelErrorBoundary     from './panel-error-boundary';
@@ -102,7 +103,7 @@ function InvoicePreview({ company }: { company: any }) {
 /* ─── componente principal ───────────────────────────────────────────────── */
 export default function SettingsView() {
   const { isAdmin, isPlatformAdmin, loading: profileLoading } = useProfile();
-  const [tab, setTab] = useState<'empresa' | 'utilizadores' | 'certificacao' | 'exportacoes' | 'auditoria' | 'erp'>('empresa');
+  const [tab, setTab] = useState<'empresa' | 'faturacao' | 'utilizadores' | 'certificacao' | 'exportacoes' | 'auditoria' | 'erp'>('empresa');
   const fileRef   = useRef<HTMLInputElement>(null);
   const [loading,   setLoading]   = useState(true);
   const [saving,    setSaving]    = useState(false);
@@ -206,6 +207,7 @@ export default function SettingsView() {
       {/* ── TABS ── */}
       <div className="flex gap-1 border-b border-border overflow-x-auto -mx-1 px-1 whitespace-nowrap scrollbar-thin">
         {tabBtn('empresa',      <Building2 className="w-4 h-4" />, 'Empresa')}
+        {tabBtn('faturacao',    <Receipt className="w-4 h-4" />, 'Faturação')}
         {isAdmin && tabBtn('utilizadores', <Users className="w-4 h-4" />, 'Utilizadores')}
         {isPlatformAdmin && tabBtn('certificacao', <ShieldCheck className="w-4 h-4" />, 'Certificação AGT')}
         {tabBtn('exportacoes',  <FileDown className="w-4 h-4" />, 'Exportações AGT')}
@@ -213,7 +215,8 @@ export default function SettingsView() {
         {tabBtn('erp',          <Plug className="w-4 h-4" />, 'Integração ERP')}
       </div>
 
-      {/* ── PANELS ── */}
+      {/* ── PAINÉIS SECUNDÁRIOS ── */}
+      {tab === 'faturacao'    && <PanelErrorBoundary name="faturacao"><BillingRulesPanel /></PanelErrorBoundary>}
       {tab === 'utilizadores' && <PanelErrorBoundary name="utilizadores"><UserManagementPanel /></PanelErrorBoundary>}
       {tab === 'certificacao' && isPlatformAdmin && <PanelErrorBoundary name="certificacao"><CertificationPanel /></PanelErrorBoundary>}
       {tab === 'exportacoes'  && <PanelErrorBoundary name="exportacoes"><SaftExportPanel /></PanelErrorBoundary>}
