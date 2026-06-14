@@ -548,12 +548,14 @@ function SessionModal({ onOpen, onClose, isCaixa = false }: {
               : <><CheckCircle2 className="w-6 h-6" /> Iniciar Turno</>
             }
           </button>
-          {!isCaixa && (
-            <button onClick={onClose}
-              className="w-full mt-2 py-2 text-xs font-medium text-slate-400 hover:text-slate-600 transition-colors">
-              Cancelar (entrar sem sessão)
-            </button>
-          )}
+          <button
+            onClick={onClose}
+            className="w-full mt-2 py-2.5 rounded-xl text-sm font-semibold border transition-colors hover:bg-slate-50 flex items-center justify-center gap-2"
+            style={{ borderColor: '#e2e8f0', color: '#64748b' }}
+          >
+            <ChevronLeft className="w-4 h-4" />
+            Voltar ao Dashboard
+          </button>
         </div>
       </div>
     </div>
@@ -1426,8 +1428,12 @@ export default function POSView() {
       {showSession && (
         <SessionModal
           onOpen={openSession}
-          onClose={() => setShowSession(false)}
-          isCaixa={true}
+          onClose={() => {
+            setShowSession(false);
+            // If there's no active session, go back to dashboard
+            if (!session) router.push('/dashboard');
+          }}
+          isCaixa={false}
         />
       )}
       {showDiscount && (
