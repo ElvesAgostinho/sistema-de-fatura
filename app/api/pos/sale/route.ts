@@ -186,7 +186,7 @@ export async function POST(req: Request) {
     const { error: rpcErr } = await admin.rpc('process_pos_sale', {
       p_company_id:      companyId,
       p_invoice_id:      invoice.id,
-      p_items:           JSON.stringify(cleanItems),
+      p_items:           cleanItems,
       p_payment_amount:  total,
       p_payment_method:  payment_method ?? 'Dinheiro',
       p_session_id:      session_id ?? null,
