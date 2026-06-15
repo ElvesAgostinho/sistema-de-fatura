@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Trash2, FileText, UserPlus, PackagePlus, Loader2, AlertCircle, Receipt } from 'lucide-react';
+import { Plus, Trash2, FileText, UserPlus, PackagePlus, Loader2, AlertCircle, Receipt, Download } from 'lucide-react';
 import { formatAOA } from '@/lib/utils';
 import { toast } from 'sonner';
 import ClientModal from '@/components/modals/client-modal';
@@ -45,6 +45,7 @@ export default function NewInvoiceView() {
   const [submitting, setSubmitting] = useState(false);
   const [clientModal, setClientModal] = useState(false);
   const [productModal, setProductModal] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
 
   // Draft persistence
   useEffect(() => {
@@ -102,6 +103,57 @@ export default function NewInvoiceView() {
   const onProductSaved = (p: any) => {
     mutateProducts((prev: any) => prev ? { products: [p, ...prev.products] } : { products: [p] });
     setProductModal(null);
+  };
+
+  const importOriginalInvoice = async () => {
+    if (!relatedDocument.trim()) { toast.error('Digite a referência da fatura primeiro (ex: FT 2026/0001)'); return; }
+    setImporting(true);
+    try {
+      const res = await fetch(`/api/invoices?search=${encodeURIComponent(relatedDocument.trim())}`);
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Erro a procurar fatura');
+      
+      // Look for EXACT match in invoice_number
+      const match = (json.invoices || []).find((i: any) => i.invoice_number.toLowerCase() === relatedDocument.trim().toLowerCase());
+      if (!match) {
+        toast.error('Fatura não encontrada. Verifique se o número está exato.');
+        return;
+      }
+
+      // Fetch full details (including items)
+      const detailRes = await fetch(`/api/invoices/${match.id}`);
+      const detailJson = await detailRes.json();
+      if (!detailRes.ok) throw new Error(detailJson.error || 'Erro a carregar detalhes');
+      
+      const inv = detailJson.invoice;
+      if (!inv || !inv.items || inv.items.length === 0) {
+        toast.error('A fatura original não tem produtos ou não foi encontrada.');
+        return;
+      }
+
+      // Populate form
+      setClientId(inv.client_id || '');
+      setTaxExempt(inv.tax_exempt || false);
+      if (inv.tax_exemption_reason) setTaxExemptionReason(inv.tax_exemption_reason);
+      
+      // Load items
+      const newItems = inv.items.map((it: any) => ({
+        id: uid(),
+        description: it.description,
+        quantity: Number(it.quantity),
+        price: Number(it.price),
+        tax_rate: Number(it.tax_rate),
+        discount: Number(it.discount || 0),
+        product_id: null // We don't necessarily need to link it back to product catalog for NC
+      }));
+      setItems(newItems);
+      toast.success('Produtos da fatura importados com sucesso! Ajuste as quantidades/valores se necessário.');
+
+    } catch (e: any) {
+      toast.error(e.message || 'Erro de comunicação');
+    } finally {
+      setImporting(false);
+    }
   };
 
   const onSubmit = async () => {
@@ -184,15 +236,29 @@ export default function NewInvoiceView() {
             {(docType === 'NC' || docType === 'ND') && (
               <div className="mt-4 pt-4 border-t border-border">
                 <label className="text-xs text-muted-foreground mb-1 block">Fatura original (obrigatório para {docType === 'NC' ? 'Nota de Crédito' : 'Nota de Débito'})</label>
-                <input
-                  value={relatedDocument}
-                  onChange={(e) => setRelatedDocument(e.target.value)}
-                  placeholder="Ex: FT 2026/0001"
-                  className="w-full h-10 px-3 rounded border border-input bg-background text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary"
-                />
+                <div className="flex gap-2">
+                  <input
+                    value={relatedDocument}
+                    onChange={(e) => setRelatedDocument(e.target.value)}
+                    placeholder="Ex: FT 2026/0001"
+                    className="flex-1 h-10 px-3 rounded border border-input bg-background text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary"
+                  />
+                  <button 
+                    type="button" 
+                    onClick={importOriginalInvoice}
+                    disabled={importing}
+                    className="h-10 px-4 rounded border border-input bg-secondary hover:bg-secondary/80 text-sm font-medium flex items-center gap-2 transition-colors"
+                  >
+                    {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                    <span className="hidden sm:inline">Importar Produtos</span>
+                  </button>
+                </div>
                 <div className="mt-2 flex items-start gap-2 text-xs text-muted-foreground">
                   <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-                  A AGT exige que toda nota de crédito/débito referencie a fatura original que está a retificar.
+                  <div>
+                    A AGT exige que toda nota de crédito/débito referencie a fatura original que está a retificar.<br/>
+                    <strong>Dica de Segurança:</strong> Ao clicar em "Importar", o sistema carrega os produtos originais para garantir que não credita valores errados.
+                  </div>
                 </div>
               </div>
             )}

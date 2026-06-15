@@ -131,12 +131,12 @@ export async function POST(req: Request) {
       if (!related_document) {
         return ApiResponse.error('Nota de Crédito exige a Fatura Original (related_document) obrigatória.');
       }
-      const { data: origInv } = await admin.from('invoices').select('id, total, status, invoice_number').eq('id', related_document).eq('company_id', companyId).maybeSingle();
+      const { data: origInv } = await admin.from('invoices').select('id, total, status, invoice_number').eq('invoice_number', related_document).eq('company_id', companyId).maybeSingle();
       if (!origInv) return ApiResponse.error('Fatura original não encontrada.', 404);
       if (origInv.status === 'cancelled') return ApiResponse.error('Não é possível emitir Nota de Crédito para uma Fatura anulada.');
 
       const { data: previousNCs } = await admin.from('invoices').select('total')
-        .eq('related_document', related_document).eq('document_type', 'NC').neq('status', 'cancelled');
+        .eq('related_document', related_document).eq('document_type', 'NC').neq('status', 'cancelled').eq('company_id', companyId);
       
       const alreadyCredited = (previousNCs || []).reduce((sum, nc) => sum + Number(nc.total || 0), 0);
       const maxAllowedCredit = Number(origInv.total) - alreadyCredited;
