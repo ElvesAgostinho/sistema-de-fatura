@@ -20,6 +20,10 @@ export async function PUT(req: Request) {
     const body = await req.json();
     const {
       name, address, phone, email, city, postal_code, business_name,
+      // Bank details
+      bank_name,
+      bank_account,
+      bank_iban,
       // Branding da fatura
       logo_url,
       logo_position,
@@ -55,6 +59,9 @@ export async function PUT(req: Request) {
     if (city !== undefined)                 update.city = city;
     if (postal_code !== undefined)          update.postal_code = postal_code;
     if (business_name !== undefined)        update.business_name = business_name;
+    if (bank_name !== undefined)            update.bank_name = bank_name;
+    if (bank_account !== undefined)         update.bank_account = bank_account;
+    if (bank_iban !== undefined)            update.bank_iban = bank_iban;
     if (logo_url !== undefined)             update.logo_url = logo_url;
     if (logo_position !== undefined)        update.logo_position = logo_position;
     if (logo_size !== undefined)            update.logo_size = logo_size;

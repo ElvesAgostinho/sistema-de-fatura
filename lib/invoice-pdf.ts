@@ -310,6 +310,15 @@ ${/* ════ TOTAIS + QR — nunca parte de página ════ */''}
           NIF<br>Nº Fatura<br>Data<br>Total<br>Hash
         </div>
       </div>` : ''}
+      
+      ${(company?.bank_iban || company?.bank_account) && !cancelled && Number(inv.total) > Number(inv.amount_paid ?? 0) ? `
+      <div style="margin-top:12px;padding:8px 12px;background:#f3f4f6;border-radius:6px;max-width:250px;font-size:9.5px;color:#4b5563;line-height:1.5;">
+        <strong style="color:#111827;font-size:10px;display:block;margin-bottom:2px;">Pagamento por Transferência:</strong>
+        ${company.bank_name ? `Banco: ${esc(company.bank_name)}<br>` : ''}
+        ${company.bank_account ? `Conta: ${esc(company.bank_account)}<br>` : ''}
+        ${company.bank_iban ? `IBAN: <strong>${esc(company.bank_iban)}</strong>` : ''}
+      </div>` : ''}
+
       ${footerText ? `<div style="margin-top:10px;max-width:220px;font-size:10.5px;color:#374151;font-style:italic;line-height:1.6;">${esc(footerText)}</div>` : ''}
     </div>
 

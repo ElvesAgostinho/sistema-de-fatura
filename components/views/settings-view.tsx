@@ -139,6 +139,9 @@ export default function SettingsView() {
         invoice_header_bg:     j.company.invoice_header_bg     ?? '#ffffff',
         invoice_show_watermark: j.company.invoice_show_watermark ?? false,
         invoice_footer_text:   j.company.invoice_footer_text   ?? '',
+        bank_name:             j.company.bank_name             ?? '',
+        bank_account:          j.company.bank_account          ?? '',
+        bank_iban:             j.company.bank_iban             ?? '',
       });
     } finally { setLoading(false); }
   })(); }, []);
@@ -262,6 +265,28 @@ export default function SettingsView() {
             <div className="md:col-span-2">
               <label className="text-xs text-muted-foreground mb-1 block">Email</label>
               <input type="email" value={company.email ?? ''} onChange={e => set('email', e.target.value)} className="w-full h-10 px-3 rounded border border-input bg-background text-sm" />
+            </div>
+          </div>
+        </div>
+
+        {/* ── DADOS BANCÁRIOS ── */}
+        <div className="ms-card p-6 space-y-4">
+          <h3 className="font-semibold flex items-center gap-2">
+            <Activity className="w-4 h-4 text-primary" /> Dados Bancários (para transferências)
+          </h3>
+          <div className="grid md:grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Banco</label>
+              <input value={company.bank_name ?? ''} onChange={e => set('bank_name', e.target.value)} placeholder="Ex: BAI, BFA, BIC" className="w-full h-10 px-3 rounded border border-input bg-background text-sm" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Número de Conta</label>
+              <input value={company.bank_account ?? ''} onChange={e => set('bank_account', e.target.value)} placeholder="Ex: 123456789.10.001" className="w-full h-10 px-3 rounded border border-input bg-background text-sm" />
+            </div>
+            <div className="md:col-span-2">
+              <label className="text-xs text-muted-foreground mb-1 block">IBAN</label>
+              <input value={company.bank_iban ?? ''} onChange={e => set('bank_iban', e.target.value)} placeholder="Ex: AO06 0040 0000 0000 0000 0000 0" className="w-full h-10 px-3 rounded border border-input bg-background text-sm font-mono" />
+              <p className="text-xs text-muted-foreground mt-1">Esta informação será apresentada no rodapé das faturas para facilitar o pagamento por transferência.</p>
             </div>
           </div>
         </div>
