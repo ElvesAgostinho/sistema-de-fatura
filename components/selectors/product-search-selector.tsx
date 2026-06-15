@@ -115,6 +115,13 @@ export default function ProductSearchSelector({ onSelect, placeholder = "Pesquis
                     setSearch('');
                     setOpen(false);
                   }}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onSelect(p);
+                    setSearch('');
+                    setOpen(false);
+                  }}
                   className="relative flex cursor-pointer select-none items-center rounded-lg px-3 py-3 text-sm outline-none aria-selected:bg-primary aria-selected:text-primary-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 transition-colors border border-transparent hover:border-primary/20 mb-1"
                 >
                   <div className="mr-3 h-8 w-8 rounded-lg bg-secondary/50 flex items-center justify-center shrink-0">
