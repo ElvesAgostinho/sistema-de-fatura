@@ -76,16 +76,15 @@ export function validateSaftInput(input: SaftInput & {
     return at - bt;
   });
 
-  let prevHashExpected: string | null = null;
   let chainOk = true;
+  const prevHashPerSeries: Record<string, string> = {};
 
   for (const inv of chronological) {
     if (!inv.invoice_number) { add('INV_NO', 'error', 'Fatura sem número.'); continue; }
     if (numbersSeen.has(inv.invoice_number)) add('INV_DUP', 'error', `Número de fatura duplicado: ${inv.invoice_number}`);
     numbersSeen.add(inv.invoice_number);
 
-    // AGT InvoiceNo format: TIPO SERIE/NNNNNN  (ex: FT A/1, FR 2025/0001, NC SRE/00042)
-    // Aceita: letras, números e hifens na série; barras obrigatórias.
+    // AGT InvoiceNo format: TIPO SERIE/NNNNNN
     if (!/^(FT|FR|NC|ND|RC|PP|GT|VD|TV|TD|AA|DA)\s+[A-Z0-9][A-Z0-9\-]*\/\d+$/.test(inv.invoice_number)) {
       add('INV_NO_FMT', 'warning',
         `Número de fatura com formato não padrão: "${inv.invoice_number}". Formato recomendado pela AGT: TIPO SÉRIE/NÚmero (ex: "FT A/1" ou "FR 2025/0001").`,
@@ -93,14 +92,12 @@ export function validateSaftInput(input: SaftInput & {
       );
     }
 
-    // client_nif: '000000000' é válido para Consumidor Final (POS)
     if (!inv.client_nif) add('INV_CLI', 'error', `Fatura ${inv.invoice_number} sem NIF de cliente.`, { invoice: inv.invoice_number });
     else if (inv.client_nif !== '000000000' && inv.client_nif !== '999999999' && !/^\d{9,14}$/.test(inv.client_nif)) {
       add('INV_CLI_FMT', 'warning', `Fatura ${inv.invoice_number}: NIF do cliente com formato inesperado: ${inv.client_nif}`);
     }
     if (!inv.issued_at) add('INV_DATE', 'error', `Fatura ${inv.invoice_number} sem data de emissão.`);
 
-    // Totals coherence — AGT: GrossTotal = NetTotal + TaxPayable
     const sub = Number(inv.subtotal);
     const tax = Number(inv.tax);
     const tot = Number(inv.total);
@@ -110,40 +107,41 @@ export function validateSaftInput(input: SaftInput & {
         add('INV_TOTALS', 'error', `Fatura ${inv.invoice_number}: GrossTotal (${tot.toFixed(2)}) ≠ NetTotal (${sub.toFixed(2)}) + TaxPayable (${tax.toFixed(2)}) = ${computed.toFixed(2)}. AGT rejeita SAF-T com esta diferença.`);
       }
     }
-    // Items vs totals
-    const itemsSum = (inv.items || []).reduce((s, it) => s + Number(it.total), 0);
-    if (Number.isFinite(itemsSum) && Math.abs(itemsSum - sub) > 0.05) {
-      add('INV_ITEMS', 'warning', `Fatura ${inv.invoice_number}: soma das linhas (${itemsSum.toFixed(2)}) difere do subtotal (${sub.toFixed(2)}).`);
+    
+    // Items vs totals: AGT requires NetTotal to match the sum of Line/CreditAmount
+    const itemsNetSum = (inv.items || []).reduce((s, it) => s + (Number(it.quantity) * Number(it.price) - Number(it.discount || 0)), 0);
+    if (Number.isFinite(itemsNetSum) && Math.abs(itemsNetSum - sub) > 0.05) {
+      add('INV_ITEMS', 'warning', `Fatura ${inv.invoice_number}: soma base das linhas (${itemsNetSum.toFixed(2)}) difere do subtotal (${sub.toFixed(2)}).`);
     }
 
-    // Exemption reason when rate=0
     for (const it of inv.items || []) {
       if (Number(it.tax_rate) === 0 && !it.tax_exemption_reason && !inv.tax_exemption_reason) {
-        add('TAX_EXEMPT', 'warning', `Fatura ${inv.invoice_number}: linha com IVA 0% sem motivo de isenção (M01-M19). Preencha o campo para atingir APTO_PARA_AUDITORIA.`);
+        add('TAX_EXEMPT', 'warning', `Fatura ${inv.invoice_number}: linha com IVA 0% sem motivo de isenção (M01-M19).`);
       }
-      // Validate exemption code — M99 is NOT a valid AGT code (maps to M19 in builder)
       const exemCode = (it.tax_exemption_reason ?? inv.tax_exemption_reason ?? '').trim();
       if (exemCode && exemCode === 'M99') {
-        add('TAX_EXEMPT_CODE', 'warning', `Fatura ${inv.invoice_number}: código M99 não reconhecido pela AGT. O sistema mapeou automaticamente para M19. Actualize o motivo para um código válido M01-M19.`);
+        add('TAX_EXEMPT_CODE', 'warning', `Fatura ${inv.invoice_number}: código M99 não reconhecido pela AGT. O sistema mapeou automaticamente para M19.`);
       } else if (exemCode && !/^M(0[1-9]|1[0-9])/.test(exemCode)) {
-        add('TAX_EXEMPT_CODE', 'warning', `Fatura ${inv.invoice_number}: código de isenção "${exemCode}" não segue formato Mxx. Use M01-M19.`);
+        add('TAX_EXEMPT_CODE', 'warning', `Fatura ${inv.invoice_number}: código de isenção "${exemCode}" não segue formato Mxx.`);
       }
     }
 
-    // Hash chain
     if (inv.hash) hashCount++;
     if (inv.signature) sigCount++;
+    
+    // Hash chain per series
+    const seriesKey = inv.invoice_number.split('/')[0];
     if (inv.status !== 'cancelled') {
-      if (prevHashExpected !== null && inv.previous_hash && inv.previous_hash !== prevHashExpected) {
-        add('HASH_CHAIN', 'error', `Encadeamento de hash quebrado na fatura ${inv.invoice_number}.`, { expected: prevHashExpected, got: inv.previous_hash });
+      const expectedHash = prevHashPerSeries[seriesKey] || null;
+      if (expectedHash !== null && inv.previous_hash && inv.previous_hash !== expectedHash) {
+        add('HASH_CHAIN', 'error', `Encadeamento de hash quebrado na fatura ${inv.invoice_number} (série ${seriesKey}).`);
         chainOk = false;
       }
-      prevHashExpected = inv.hash || prevHashExpected;
+      prevHashPerSeries[seriesKey] = inv.hash || expectedHash || '';
     }
 
-    // Document type
     const docType = (inv.document_type || 'FT').toUpperCase();
-    if (!['FT', 'FR', 'NC', 'ND', 'RC'].includes(docType)) add('INV_TYPE', 'warning', `Tipo de documento inválido em ${inv.invoice_number}: ${docType}`);
+    if (!['FT', 'FR', 'NC', 'ND', 'RC', 'PP', 'OR', 'GT'].includes(docType)) add('INV_TYPE', 'warning', `Tipo de documento inválido em ${inv.invoice_number}: ${docType}`);
     if ((docType === 'NC' || docType === 'ND') && !inv.related_document) {
       add('INV_REF', 'error', `${docType} ${inv.invoice_number} não referencia documento de origem.`);
     }
