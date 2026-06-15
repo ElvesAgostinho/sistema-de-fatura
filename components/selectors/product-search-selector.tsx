@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Command } from 'cmdk';
 import { Search, Loader2, Package, Check, X } from 'lucide-react';
 import { useDebounce } from 'react-use';
 import { formatAOA } from '@/lib/utils';
@@ -78,23 +77,23 @@ export default function ProductSearchSelector({ onSelect, placeholder = "Pesquis
 
       {open && (
         <div className="absolute top-full left-0 z-[100] mt-2 w-full overflow-hidden rounded-xl border border-border bg-white text-popover-foreground shadow-2xl animate-in fade-in slide-in-from-top-2">
-          <Command className="flex h-full w-full flex-col overflow-hidden bg-white" shouldFilter={false}>
-            <div className="flex items-center border-b px-3 bg-secondary/10" cmdk-input-wrapper="">
+          <div className="flex h-full w-full flex-col overflow-hidden bg-white">
+            <div className="flex items-center border-b px-3 bg-secondary/10">
               <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
-              <Command.Input
-                className="flex h-12 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                placeholder="Pesquisar..."
+              <input
+                className="flex h-12 w-full bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                placeholder="Pesquisar catálogo de produtos..."
                 value={search}
-                onValueChange={setSearch}
+                onChange={(e) => setSearch(e.target.value)}
                 autoFocus
               />
               {search && (
-                 <button onClick={() => setSearch('')} className="p-1 hover:bg-secondary rounded-full">
-                    <X className="w-3.5 h-3.5" />
+                 <button onClick={() => setSearch('')} className="p-1 hover:bg-secondary rounded-full text-muted-foreground hover:text-foreground">
+                    <X className="w-4 h-4" />
                  </button>
               )}
             </div>
-            <Command.List className="max-h-[300px] overflow-y-auto overflow-x-hidden p-2">
+            <div className="max-h-[300px] overflow-y-auto overflow-x-hidden p-2">
               {loading && products.length === 0 && (
                 <div className="py-10 text-center text-sm text-muted-foreground flex flex-col items-center gap-2">
                    <Loader2 className="w-5 h-5 animate-spin" />
@@ -107,42 +106,36 @@ export default function ProductSearchSelector({ onSelect, placeholder = "Pesquis
                 </div>
               )}
               {products.map((p) => (
-                <Command.Item
+                <div
                   key={p.id}
-                  value={p.id}
-                  onSelect={() => {
-                    onSelect(p);
-                    setSearch('');
-                    setOpen(false);
-                  }}
-                  onMouseDown={(e) => {
+                  onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
                     onSelect(p);
                     setSearch('');
                     setOpen(false);
                   }}
-                  className="relative flex cursor-pointer select-none items-center rounded-lg px-3 py-3 text-sm outline-none aria-selected:bg-primary aria-selected:text-primary-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 transition-colors border border-transparent hover:border-primary/20 mb-1"
+                  className="group relative flex cursor-pointer select-none items-center rounded-lg px-3 py-3 text-sm outline-none transition-colors border border-transparent hover:border-primary/20 hover:bg-primary/5 hover:text-primary mb-1"
                 >
-                  <div className="mr-3 h-8 w-8 rounded-lg bg-secondary/50 flex items-center justify-center shrink-0">
-                    <Package className="h-4 w-4 opacity-70" />
+                  <div className="mr-3 h-8 w-8 rounded-lg bg-secondary/50 flex items-center justify-center shrink-0 group-hover:bg-primary/10">
+                    <Package className="h-4 w-4 opacity-70 group-hover:opacity-100 group-hover:text-primary" />
                   </div>
                   <div className="flex flex-col flex-1 overflow-hidden">
-                    <div className="font-bold truncate">{p.name}</div>
-                    <div className="flex items-center gap-2 text-[10px] opacity-80 uppercase tracking-widest font-medium">
-                      {p.sku && <span className="bg-black/5 px-1 rounded">{p.sku}</span>}
-                      <span>{formatAOA(p.price)}</span>
+                    <div className="font-bold truncate text-foreground group-hover:text-primary">{p.name}</div>
+                    <div className="flex items-center gap-2 text-[10px] opacity-80 uppercase tracking-widest font-medium mt-0.5">
+                      {p.sku && <span className="bg-black/5 px-1.5 py-0.5 rounded text-muted-foreground group-hover:text-primary/70">{p.sku}</span>}
+                      <span className="font-semibold text-primary/80">{formatAOA(p.price)}</span>
                       {p.quantity_in_stock !== undefined && (
-                        <span className={p.quantity_in_stock <= 0 ? 'text-destructive font-bold' : ''}>
+                        <span className={p.quantity_in_stock <= 0 ? 'text-destructive font-bold' : 'text-muted-foreground'}>
                           Stock: {p.quantity_in_stock}
                         </span>
                       )}
                     </div>
                   </div>
-                </Command.Item>
+                </div>
               ))}
-            </Command.List>
-          </Command>
+            </div>
+          </div>
         </div>
       )}
     </div>
