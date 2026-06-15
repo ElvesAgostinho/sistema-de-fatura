@@ -33,6 +33,35 @@ export default function SaftExportPanel() {
   const [validating, setValidating] = useState(false);
   const [report, setReport] = useState<Report | null>(null);
 
+  const [downloadingInv, setDownloadingInv] = useState(false);
+  const [invYear, setInvYear] = useState(year);
+
+  const downloadInventory = async () => {
+    setDownloadingInv(true);
+    try {
+      const r = await fetch(`/api/fiscal-config/saft-inventory?year=${invYear}`);
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        toast.error(j?.error ?? 'Falha a gerar ficheiro de Inventários');
+        return;
+      }
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const cd = r.headers.get('Content-Disposition') ?? '';
+      const m = cd.match(/filename="?([^"]+)"?/);
+      a.download = m?.[1] ?? `SAFT_AO_INVENTARIOS_${invYear}.xml`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success('Ficheiro de Inventários gerado com sucesso');
+    } catch {
+      toast.error('Erro de rede');
+    } finally { setDownloadingInv(false); }
+  };
+
   const validate = async () => {
     setValidating(true);
     setReport(null);
@@ -207,6 +236,36 @@ export default function SaftExportPanel() {
           )}
         </div>
       )}
+
+      <div className="ms-card p-6 space-y-4">
+        <div>
+          <h3 className="font-semibold flex items-center gap-2"><FileDown className="w-4 h-4 text-primary" />Comunicação de Inventários (Stocks)</h3>
+          <p className="text-sm text-muted-foreground mt-1">Gera o ficheiro XML oficial de inventários com as quantidades e valorização do stock para entrega anual à AGT.</p>
+        </div>
+        
+        <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded text-sm">
+          <Info className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+          <div className="text-amber-800">
+            Apenas produtos com stock superior a zero são declarados. Se não tiver stock, o ficheiro será automaticamente gerado com a declaração "Sem Existências" (conforme obrigatoriedade legal).
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-end gap-3">
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">Ano Fiscal</label>
+            <select value={invYear} onChange={e => setInvYear(Number(e.target.value))} className="w-40 h-10 px-3 rounded border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+              {Array.from({length: 5}, (_, i) => year - i).map(y => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+          </div>
+          
+          <button onClick={downloadInventory} disabled={downloadingInv} className="ms-btn-primary disabled:opacity-60 flex-1 md:flex-none">
+            {downloadingInv ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
+            {downloadingInv ? 'Gerando...' : 'Descarregar XML Inventário'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
