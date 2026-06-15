@@ -7,7 +7,7 @@ import { formatAOA, formatDateTime, cn } from '@/lib/utils';
 import { useResource } from '@/lib/hooks/use-resource';
 
 type Client = { id: string; name: string; nif?: string; email?: string; phone?: string; address?: string; is_active: boolean };
-type Invoice = { id: string; invoice_number: string; total: number; amount_paid: number; status: string; payment_status: string; issued_at: string };
+type Invoice = { id: string; invoice_number: string; total: number; amount_paid: number; status: string; payment_status: string; issued_at: string; document_type: string; };
 
 export default function ClientDetailView({ id }: { id: string }) {
   const router = useRouter();
@@ -21,8 +21,9 @@ export default function ClientDetailView({ id }: { id: string }) {
   const client = clientData.client;
   const invoices = invData?.invoices ?? [];
 
-  const totalRevenue = invoices.reduce((sum, inv) => sum + (inv.status === 'issued' ? inv.total : 0), 0);
-  const totalPaid = invoices.reduce((sum, inv) => sum + (inv.status === 'issued' ? (inv.amount_paid ?? 0) : 0), 0);
+  const fiscalInvoices = invoices.filter(inv => inv.status === 'issued' && inv.document_type !== 'PP' && inv.document_type !== 'OR');
+  const totalRevenue = fiscalInvoices.reduce((sum, inv) => sum + inv.total, 0);
+  const totalPaid = fiscalInvoices.reduce((sum, inv) => sum + (inv.amount_paid ?? 0), 0);
   const totalDebt = totalRevenue - totalPaid;
 
   return (

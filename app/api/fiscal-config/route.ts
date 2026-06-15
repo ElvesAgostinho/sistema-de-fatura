@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic';
 // Fields the admin is allowed to edit BEFORE certification.
 // saft_modo is editable at all times (run SAF-T in 'teste' even after cert).
 // After cert: mode / numero / data / chaves are immutable at the DB level.
-const EDITABLE_KEYS = ['agt_certificado_numero', 'agt_data_certificacao', 'chave_privada', 'chave_publica', 'saft_modo'] as const;
+const EDITABLE_KEYS = ['agt_certificado_numero', 'agt_data_certificacao', 'chave_privada', 'chave_publica', 'saft_modo', 'default_retention_rate', 'default_tax_exemption_reason'] as const;
 
 export async function GET() {
   const ctx = await getCurrentUserContext();
@@ -71,7 +71,11 @@ export async function PUT(req: Request) {
         if (k === 'chave_privada' || k === 'chave_publica') continue; // don't accidentally erase keys
         updates[k] = null;
       } else {
-        updates[k] = String(body[k]);
+        if (k === 'default_retention_rate') {
+          updates[k] = parseFloat(body[k]);
+        } else {
+          updates[k] = String(body[k]);
+        }
       }
     }
   }

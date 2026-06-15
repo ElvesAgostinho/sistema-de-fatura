@@ -30,6 +30,8 @@ export type FiscalConfig = {
   chave_privada: string | null;
   chave_publica: string | null;
   saft_modo: SaftMode;
+  default_retention_rate: number | null;
+  default_tax_exemption_reason: string | null;
   activated_at: string | null;
   activated_by: string | null;
   created_at: string;
