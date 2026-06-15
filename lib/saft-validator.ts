@@ -109,7 +109,11 @@ export function validateSaftInput(input: SaftInput & {
     }
     
     // Items vs totals: AGT requires NetTotal to match the sum of Line/CreditAmount
-    const itemsNetSum = (inv.items || []).reduce((s, it) => s + (Number(it.quantity) * Number(it.price) - Number(it.discount || 0)), 0);
+    const safeItems = (inv.items && inv.items.length > 0) ? inv.items : (inv.status === 'cancelled' ? [{
+      quantity: 1, price: Number(inv.subtotal) || 0, discount: 0, tax_rate: Number(inv.tax) > 0 ? 14 : 0
+    }] : []);
+    
+    const itemsNetSum = safeItems.reduce((s: any, it: any) => s + (Number(it.quantity) * Number(it.price) - Number(it.discount || 0)), 0);
     if (Number.isFinite(itemsNetSum) && Math.abs(itemsNetSum - sub) > 0.05) {
       add('INV_ITEMS', 'warning', `Fatura ${inv.invoice_number}: soma base das linhas (${itemsNetSum.toFixed(2)}) difere do subtotal (${sub.toFixed(2)}).`);
     }

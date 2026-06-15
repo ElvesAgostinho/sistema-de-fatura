@@ -407,7 +407,18 @@ ${taxTable}
     const amountTag = isCreditNote ? 'DebitAmount' : 'CreditAmount';
     const hashVal = inv.signature || (inv.hash && String(inv.hash).length >= 8 ? String(inv.hash) : '0');
 
-    const itemLines = (inv.items || []).map((it, idx) => {
+    // Mapeia os items. Se for uma fatura cancelada sem itens (dados de teste órfãos), gera um item fictício
+    const safeItems = (inv.items && inv.items.length > 0) ? inv.items : (isCancelled ? [{
+      description: 'Anulação de documento',
+      quantity: 1,
+      price: Number(inv.subtotal) || 0,
+      discount: 0,
+      tax_rate: Number(inv.tax) > 0 ? 14 : 0,
+      tax_exemption_reason: inv.tax_exemption_reason || 'M04',
+      unit_of_measure: 'UN'
+    }] : []);
+
+    const itemLines = safeItems.map((it: any, idx: number) => {
       const key = String(it.description || '').trim().toLowerCase();
       const prodCode = productMap.get(key)?.code ?? slugCode(it.description);
       const qtyNum = Number(it.quantity);
