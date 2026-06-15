@@ -239,8 +239,8 @@ export default function SaftExportPanel() {
 
       <div className="ms-card p-6 space-y-4">
         <div>
-          <h3 className="font-semibold flex items-center gap-2"><FileDown className="w-4 h-4 text-primary" />Comunicação de Inventários (Stocks)</h3>
-          <p className="text-sm text-muted-foreground mt-1">Gera o ficheiro XML oficial de inventários com as quantidades e valorização do stock para entrega anual à AGT.</p>
+          <h3 className="font-semibold flex items-center gap-2"><FileDown className="w-4 h-4 text-primary" />SAF-T de Inventários (Stocks e Compras)</h3>
+          <p className="text-sm text-muted-foreground mt-1">Gera o ficheiro SAF-T XML de inventários com as quantidades e valorização do stock para entrega anual à AGT.</p>
         </div>
         
         <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded text-sm">
@@ -262,7 +262,7 @@ export default function SaftExportPanel() {
           
           <button onClick={downloadInventory} disabled={downloadingInv} className="ms-btn-primary disabled:opacity-60 flex-1 md:flex-none">
             {downloadingInv ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
-            {downloadingInv ? 'Gerando...' : 'Descarregar XML Inventário'}
+            {downloadingInv ? 'Gerando...' : 'Gerar SAF-T de Inventários'}
           </button>
         </div>
       </div>
