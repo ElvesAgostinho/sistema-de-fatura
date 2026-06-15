@@ -2,11 +2,12 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Search, Plus, FileText, Download, XCircle, CheckCircle2, ChevronLeft, ChevronRight, Filter, Loader2, RefreshCw, Calendar, X } from 'lucide-react';
+import { Search, Plus, FileText, Download, XCircle, CheckCircle2, ChevronLeft, ChevronRight, Filter, Loader2, RefreshCw, Calendar, X, Ban } from 'lucide-react';
 import { formatAOA, formatDateTime } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useResource } from '@/lib/hooks/use-resource';
 import { useDebounced } from '@/lib/hooks/use-debounced';
+import { useProfile } from '@/lib/hooks/use-profile';
 import ExportButton from '@/components/export-button';
 
 type Invoice = {
@@ -26,6 +27,11 @@ export default function InvoicesListView() {
   const [dateTo, setDateTo] = useState('');
   const [page, setPage] = useState(1);
   const pageSize = 20;
+
+  const { isAdmin } = useProfile();
+  const [cancelData, setCancelData] = useState<{ id: string, number: string } | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelling, setCancelling] = useState(false);
 
   const debounced = useDebounced(search.trim(), 300);
   const hasFilters = Boolean(debounced || status || docType || dateFrom || dateTo);
@@ -74,6 +80,30 @@ export default function InvoicesListView() {
     } catch { toast.error('Erro PDF'); }
   };
 
+  const submitCancel = async () => {
+    if (!cancelData) return;
+    if (cancelReason.trim().length < 5) { toast.error('Motivo obrigatório (min 5 chars)'); return; }
+    
+    setCancelling(true);
+    try {
+      const r = await fetch(`/api/invoices/${cancelData.id}/cancel`, { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ reason: cancelReason }) 
+      });
+      const j = await r.json();
+      if (!r.ok) { toast.error(j?.error ?? 'Falha ao anular'); return; }
+      toast.success('Fatura anulada com sucesso!');
+      setCancelData(null);
+      setCancelReason('');
+      reload();
+    } catch { 
+      toast.error('Erro ao comunicar com o servidor'); 
+    } finally { 
+      setCancelling(false); 
+    }
+  };
+
   const exportCols = useMemo(() => ([
     { header: 'Número', accessor: (i: Invoice) => i.invoice_number },
     { header: 'Tipo', accessor: (i: Invoice) => i.document_type },
@@ -89,7 +119,7 @@ export default function InvoicesListView() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Faturas</h1>
-          <p className="text-sm text-muted-foreground">Consulte e gerencie as faturas emitidas</p>
+          <p className="text-sm text-muted-foreground">Consulte, filtre e anule as faturas emitidas</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <ExportButton rows={invoices} columns={exportCols} filenameBase="faturas" sheetName="Faturas" />
@@ -101,13 +131,13 @@ export default function InvoicesListView() {
         </div>
       </div>
 
-      <div className="ms-card p-4 space-y-3">
+      <div className="ms-card p-4 space-y-3 border-l-4 border-l-primary">
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <input type="search" placeholder="Buscar por número (ex: FT 2026/0001)" value={search}
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary" />
+            <input type="search" placeholder="Filtro rápido: Escreva o número (ex: FR 2026/3) ou o nome do cliente..." value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-              className="w-full h-10 pl-10 pr-10 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+              className="w-full h-11 pl-10 pr-10 rounded-md border-2 border-primary/20 bg-background text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all" />
             {isRefreshing && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-muted-foreground" />}
           </div>
           <div className="relative">
@@ -180,7 +210,7 @@ export default function InvoicesListView() {
               {loading || validating ? (
                 <tr><td colSpan={8} className="py-10 text-center"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground mx-auto" /></td></tr>
               ) : invoices.length === 0 ? (
-                <tr><td colSpan={8} className="py-10 text-center text-muted-foreground">Nenhuma fatura encontrada.</td></tr>
+                <tr><td colSpan={8} className="py-10 text-center text-muted-foreground">Nenhuma fatura encontrada. Tente ajustar os filtros.</td></tr>
               ) : (
                 invoices.map((inv) => {
                   const clientName = inv.client?.name || 'Consumidor Final';
@@ -207,8 +237,13 @@ export default function InvoicesListView() {
                       </td>
                       <td className="py-2 px-3 text-right">
                         <div className="flex items-center justify-end gap-1">
-                          <Link href={`/invoices/${inv.id}`} className="w-9 h-9 sm:w-11 sm:h-11 rounded-lg flex items-center justify-center hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors" title="Ver"><FileText className="w-4 h-4" /></Link>
-                          <button onClick={() => onDownloadPdf(inv.id, inv.invoice_number.replace(/[^a-zA-Z0-9]/g, '_'))} className="w-9 h-9 sm:w-11 sm:h-11 rounded-lg flex items-center justify-center hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors" title="PDF"><Download className="w-4 h-4" /></button>
+                          <Link href={`/invoices/${inv.id}`} className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors" title="Ver fatura"><FileText className="w-4 h-4" /></Link>
+                          <button onClick={() => onDownloadPdf(inv.id, inv.invoice_number.replace(/[^a-zA-Z0-9]/g, '_'))} className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors" title="Descarregar PDF"><Download className="w-4 h-4" /></button>
+                          {!isCancelled && isAdmin && (
+                            <button onClick={() => setCancelData({ id: inv.id, number: inv.invoice_number })} className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors" title="Anular Fatura">
+                              <Ban className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -228,6 +263,29 @@ export default function InvoicesListView() {
           </div>
         )}
       </div>
+
+      {cancelData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-in fade-in">
+          <div className="bg-background rounded-lg shadow-xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-lg font-bold flex items-center gap-2"><Ban className="w-5 h-5 text-destructive" /> Anular Fatura</h2>
+              <button onClick={() => setCancelData(null)} className="p-1 hover:bg-secondary rounded-full"><X className="w-5 h-5" /></button>
+            </div>
+            <p className="text-sm font-medium mb-1">Fatura: {cancelData.number}</p>
+            <p className="text-sm text-muted-foreground mb-4">A fatura continuará a constar no ficheiro SAF-T (exigência AGT), mas ficará com o estado "Cancelada". Esta acção é irreversível.</p>
+            <div className="mb-4">
+              <label className="text-xs font-semibold mb-1 block uppercase text-muted-foreground">Motivo de Anulação</label>
+              <textarea value={cancelReason} onChange={e => setCancelReason(e.target.value)} placeholder="Ex: Erro nos dados do cliente..." rows={3} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"></textarea>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button disabled={cancelling} onClick={() => setCancelData(null)} className="px-4 py-2 rounded-md text-sm font-medium border bg-background hover:bg-secondary">Voltar</button>
+              <button disabled={cancelling} onClick={submitCancel} className="px-4 py-2 rounded-md text-sm font-medium bg-destructive text-destructive-foreground hover:bg-destructive/90 inline-flex items-center gap-2">
+                {cancelling ? <Loader2 className="w-4 h-4 animate-spin" /> : <Ban className="w-4 h-4" />} Confirmar Anulação
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
