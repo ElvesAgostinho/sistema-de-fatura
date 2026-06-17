@@ -227,13 +227,21 @@ export default function InvoicesListView() {
                       <td className="py-2 px-3 text-muted-foreground hidden sm:table-cell">{formatDateTime(inv.issued_at)}</td>
                       <td className="py-2 px-3 font-mono text-xs sm:text-sm">{formatAOA(inv.total)}</td>
                       <td className="py-2 px-3 font-mono hidden md:table-cell">
-                        {!isCancelled && debt > 0 ? <span className="text-warning font-medium">{formatAOA(debt)}</span> : !isCancelled ? <span className="text-success">0,00</span> : <span className="text-muted-foreground">-</span>}
+                        {!['PP', 'OR', 'GT'].includes(inv.document_type) ? (
+                          !isCancelled && debt > 0 ? <span className="text-warning font-medium">{formatAOA(debt)}</span> : !isCancelled ? <span className="text-success">0,00</span> : <span className="text-muted-foreground">-</span>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
                       </td>
                       <td className="py-2 px-3">
                         {isCancelled ? <span className="inline-flex text-[10px] uppercase font-bold bg-destructive/10 text-destructive px-1.5 py-0.5 rounded">Cancelada</span> : <span className="inline-flex text-[10px] uppercase font-bold bg-primary/10 text-primary px-1.5 py-0.5 rounded">Emitida</span>}
                       </td>
                       <td className="py-2 px-3 hidden sm:table-cell">
-                        {isCancelled ? <span className="text-muted-foreground">-</span> : inv.payment_status === 'pago' ? <span className="inline-flex text-[10px] uppercase font-bold bg-success/10 text-success px-1.5 py-0.5 rounded">Pago</span> : inv.payment_status === 'parcial' ? <span className="inline-flex text-[10px] uppercase font-bold bg-warning/10 text-warning px-1.5 py-0.5 rounded">Parcial</span> : <span className="inline-flex text-[10px] uppercase font-bold bg-secondary text-muted-foreground px-1.5 py-0.5 rounded">Pendente</span>}
+                        {!['PP', 'OR', 'GT'].includes(inv.document_type) ? (
+                          isCancelled ? <span className="text-muted-foreground">-</span> : inv.payment_status === 'pago' ? <span className="inline-flex text-[10px] uppercase font-bold bg-success/10 text-success px-1.5 py-0.5 rounded">Pago</span> : inv.payment_status === 'parcial' ? <span className="inline-flex text-[10px] uppercase font-bold bg-warning/10 text-warning px-1.5 py-0.5 rounded">Parcial</span> : <span className="inline-flex text-[10px] uppercase font-bold bg-secondary text-muted-foreground px-1.5 py-0.5 rounded">Pendente</span>
+                        ) : (
+                          <span className="inline-flex text-[10px] uppercase font-bold bg-secondary/50 text-muted-foreground px-1.5 py-0.5 rounded border border-border">N/A</span>
+                        )}
                       </td>
                       <td className="py-2 px-3 text-right">
                         <div className="flex items-center justify-end gap-1">

@@ -168,7 +168,7 @@ export default function InvoiceDetailView({ id }: { id: string }) {
           </Link>
           <button onClick={onDownloadPdf} className="ms-btn-primary"><Download className="w-4 h-4" /> PDF</button>
           {!cancelled && <button onClick={() => setShowEmailConfirm(true)} className="px-4 py-2 rounded text-sm font-medium bg-primary/10 text-primary hover:bg-primary/20 inline-flex items-center gap-2"><Mail className="w-4 h-4" /> Enviar por email</button>}
-          {!cancelled && inv.payment_status !== 'pago' && isAdmin && <button onClick={() => setShowPaymentModal(true)} className="px-4 py-2 rounded text-sm font-medium bg-success/10 text-success hover:bg-success/20 inline-flex items-center gap-2"><DollarSign className="w-4 h-4" /> {['FT', 'ND'].includes(inv.document_type) ? 'Emitir Recibo' : 'Registar pagamento'}</button>}
+          {!cancelled && !['PP', 'OR', 'GT'].includes(inv.document_type) && inv.payment_status !== 'pago' && isAdmin && <button onClick={() => setShowPaymentModal(true)} className="px-4 py-2 rounded text-sm font-medium bg-success/10 text-success hover:bg-success/20 inline-flex items-center gap-2"><DollarSign className="w-4 h-4" /> {['FT', 'ND'].includes(inv.document_type) ? 'Emitir Recibo' : 'Registar pagamento'}</button>}
           {!cancelled && isAdmin && <button onClick={() => setCancelOpen(true)} className="px-4 py-2 rounded text-sm font-medium bg-destructive/10 text-destructive hover:bg-destructive/20 inline-flex items-center gap-2"><Ban className="w-4 h-4" /> Cancelar</button>}
         </div>
       </div>
@@ -258,7 +258,7 @@ export default function InvoiceDetailView({ id }: { id: string }) {
           <div className="flex justify-between text-sm"><span className="text-muted-foreground">IVA</span><span className="font-mono">{formatAOA(inv.tax)}</span></div>
           <div className="h-px bg-border my-2" />
           <div className="flex justify-between text-lg font-bold"><span>Total</span><span className="font-mono text-primary">{formatAOA(inv.total)}</span></div>
-          {!cancelled && (
+          {!cancelled && !['PP', 'OR', 'GT'].includes(inv.document_type) && (
             <>
               <div className="h-px bg-border my-2" />
               <div className="flex justify-between text-sm"><span className="text-muted-foreground">Recebido</span><span className="font-mono text-success">{formatAOA(Number(inv.amount_paid ?? 0))}</span></div>
@@ -274,7 +274,7 @@ export default function InvoiceDetailView({ id }: { id: string }) {
       </div>
 
       {/* Payments section */}
-      {!cancelled && (
+      {!cancelled && !['PP', 'OR', 'GT'].includes(inv.document_type) && (
         <div className="ms-card overflow-hidden">
           <div className="px-5 py-3 border-b bg-secondary/40 flex items-center justify-between">
             <h3 className="font-semibold flex items-center gap-2"><DollarSign className="w-4 h-4 text-primary" /> Pagamentos recebidos</h3>

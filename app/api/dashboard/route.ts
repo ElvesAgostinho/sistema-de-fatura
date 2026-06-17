@@ -25,36 +25,36 @@ export async function GET() {
       admin.from('invoices')
         .select('subtotal, tax, total, status')
         .eq('company_id', companyId)
-        .not('document_type', 'in', '("PP","OR")')
+        .not('document_type', 'in', '("PP","OR","GT")')
         .gte('issued_at', firstDay),
       admin.from('invoices')
         .select('issued_at, total, tax, status')
         .eq('company_id', companyId)
-        .not('document_type', 'in', '("PP","OR")')
+        .not('document_type', 'in', '("PP","OR","GT")')
         .gte('issued_at', firstDayYear).order('issued_at'),
       admin.from('invoices')
         .select('id, invoice_number, total, status, issued_at, payment_status, amount_paid, client:clients(name, nif)')
         .eq('company_id', companyId).order('issued_at', { ascending: false }).limit(5),
-      admin.from('invoices').select('*', { count: 'exact', head: true }).eq('company_id', companyId).eq('status', 'issued').not('document_type', 'in', '("PP","OR")'),
-      admin.from('invoices').select('*', { count: 'exact', head: true }).eq('company_id', companyId).eq('status', 'cancelled').not('document_type', 'in', '("PP","OR")'),
+      admin.from('invoices').select('*', { count: 'exact', head: true }).eq('company_id', companyId).eq('status', 'issued').not('document_type', 'in', '("PP","OR","GT")'),
+      admin.from('invoices').select('*', { count: 'exact', head: true }).eq('company_id', companyId).eq('status', 'cancelled').not('document_type', 'in', '("PP","OR","GT")'),
       admin.from('clients').select('*', { count: 'exact', head: true }).eq('company_id', companyId).eq('is_active', true),
       admin.from('products').select('*', { count: 'exact', head: true }).eq('company_id', companyId).eq('is_active', true),
       admin.from('invoices')
         .select('total, client:clients(id, name)')
         .eq('company_id', companyId).eq('status', 'issued')
-        .not('document_type', 'in', '("PP","OR")')
+        .not('document_type', 'in', '("PP","OR","GT")')
         .gte('issued_at', firstDayYear),
       admin.from('invoice_items')
         .select('quantity, price, product:products(id, name), invoice:invoices!inner(status, issued_at, company_id, document_type)')
         .eq('invoice.company_id', companyId)
         .eq('invoice.status', 'issued')
-        .not('invoice.document_type', 'in', '("PP","OR")')
+        .not('invoice.document_type', 'in', '("PP","OR","GT")')
         .gte('invoice.issued_at', firstDayYear)
         .limit(500),
       admin.from('invoices')
         .select('id, invoice_number, total, amount_paid, payment_status, issued_at, client:clients(name)')
         .eq('company_id', companyId).eq('status', 'issued')
-        .not('document_type', 'in', '("PP","OR")')
+        .not('document_type', 'in', '("PP","OR","GT")')
         .in('payment_status', ['pendente', 'parcial'])
         .order('issued_at', { ascending: true }).limit(10),
       admin.from('products')

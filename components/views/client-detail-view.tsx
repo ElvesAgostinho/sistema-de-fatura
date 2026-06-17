@@ -26,7 +26,7 @@ export default function ClientDetailView({ id }: { id: string }) {
   const client = clientData.client;
   const invoices = invData?.invoices ?? [];
 
-  const fiscalInvoices = invoices.filter(inv => inv.status === 'issued' && inv.document_type !== 'PP' && inv.document_type !== 'OR');
+  const fiscalInvoices = invoices.filter(inv => inv.status === 'issued' && !['PP', 'OR', 'GT'].includes(inv.document_type));
   const totalRevenue = fiscalInvoices.reduce((sum, inv) => sum + inv.total, 0);
   const totalPaid = fiscalInvoices.reduce((sum, inv) => sum + (inv.amount_paid ?? 0), 0);
   const totalDebt = totalRevenue - totalPaid;
@@ -137,10 +137,11 @@ export default function ClientDetailView({ id }: { id: string }) {
                       let currentBalance = 0;
                       const ledgerLines = [...invoices].reverse().map(inv => {
                         const isCancelled = inv.status === 'cancelled';
-                        const debit = isCancelled ? 0 : inv.total;
-                        const credit = isCancelled ? 0 : (inv.amount_paid ?? 0);
+                        const isFinancial = !['PP', 'OR', 'GT'].includes(inv.document_type);
+                        const debit = isCancelled || !isFinancial ? 0 : inv.total;
+                        const credit = isCancelled || !isFinancial ? 0 : (inv.amount_paid ?? 0);
                         currentBalance += (debit - credit);
-                        return { ...inv, debit, credit, balance: currentBalance, isCancelled };
+                        return { ...inv, debit, credit, balance: currentBalance, isCancelled, isFinancial };
                       }).reverse();
 
                       return ledgerLines.map((line) => {
@@ -164,14 +165,16 @@ export default function ClientDetailView({ id }: { id: string }) {
                               </Link>
                             </td>
                             <td className="py-2 px-3 text-muted-foreground">{formatDateTime(line.issued_at)}</td>
-                            <td className="py-2 px-3 text-right font-mono">{line.debit > 0 ? formatAOA(line.debit) : '-'}</td>
-                            <td className="py-2 px-3 text-right font-mono text-success">{line.credit > 0 ? formatAOA(line.credit) : '-'}</td>
+                            <td className="py-2 px-3 text-right font-mono">{line.isFinancial && line.debit > 0 ? formatAOA(line.debit) : '-'}</td>
+                            <td className="py-2 px-3 text-right font-mono text-success">{line.isFinancial && line.credit > 0 ? formatAOA(line.credit) : '-'}</td>
                             <td className="py-2 px-3 text-right font-mono font-semibold">
-                              {line.balance > 0 ? <span className="text-warning">{formatAOA(line.balance)}</span> : <span className="text-success">{formatAOA(line.balance)}</span>}
+                              {line.isFinancial ? (line.balance > 0 ? <span className="text-warning">{formatAOA(line.balance)}</span> : <span className="text-success">{formatAOA(line.balance)}</span>) : <span className="text-muted-foreground">-</span>}
                             </td>
                             <td className="py-2 px-3 text-center">
                               {line.isCancelled ? (
                                 <span className="inline-flex text-[10px] uppercase font-bold bg-destructive/10 text-destructive px-1.5 py-0.5 rounded">Cancelado</span>
+                              ) : !line.isFinancial ? (
+                                <span className="inline-flex text-[10px] uppercase font-bold bg-secondary/50 text-muted-foreground px-1.5 py-0.5 rounded border border-border">N/A</span>
                               ) : line.payment_status === 'pago' ? (
                                 <span className="inline-flex text-[10px] uppercase font-bold bg-success/10 text-success px-1.5 py-0.5 rounded">Pago</span>
                               ) : line.payment_status === 'parcial' ? (
