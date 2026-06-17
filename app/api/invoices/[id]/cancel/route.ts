@@ -118,7 +118,32 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         });
       }
     }
+    // Reverter pagamentos se for Recibo (RC)
+    if (invoice.document_type === 'RC') {
+      const { data: allocations } = await admin
+        .from('receipt_allocations')
+        .select('invoice_id, amount')
+        .eq('receipt_id', invoice.id);
 
+      if (allocations && allocations.length > 0) {
+        for (const alloc of allocations) {
+          const { data: origInv } = await admin.from('invoices').select('id, amount_paid, total').eq('id', alloc.invoice_id).single();
+          if (origInv) {
+            const newAmountPaid = Math.max(0, Number(origInv.amount_paid || 0) - Number(alloc.amount));
+            const newStatus = newAmountPaid >= Number(origInv.total) ? 'pago' : newAmountPaid > 0 ? 'parcial' : 'pendente';
+            await admin.from('invoices').update({ amount_paid: newAmountPaid, payment_status: newStatus }).eq('id', origInv.id);
+          }
+        }
+      } else if (invoice.related_document) {
+        // Fallback for older receipts
+        const { data: origInv } = await admin.from('invoices').select('id, amount_paid, total').eq('invoice_number', invoice.related_document).maybeSingle();
+        if (origInv) {
+          const newAmountPaid = Math.max(0, Number(origInv.amount_paid || 0) - Number(invoice.total));
+          const newStatus = newAmountPaid >= Number(origInv.total) ? 'pago' : newAmountPaid > 0 ? 'parcial' : 'pendente';
+          await admin.from('invoices').update({ amount_paid: newAmountPaid, payment_status: newStatus }).eq('id', origInv.id);
+        }
+      }
+    }
     // Audit log — obrigatório para rastreabilidade AGT
     await admin.from('audit_logs').insert({
       user_id:    ctx.user.id,

@@ -1,12 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { X, Loader2 } from 'lucide-react';
+import { X, Loader2, ListChecks } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { formatAOA } from '@/lib/utils';
 
+type Invoice = { id: string; invoice_number: string; total: number; amount_paid?: number; document_type?: string };
+
 type Props = {
-  invoice: { id: string; invoice_number: string; total: number; amount_paid?: number; document_type?: string };
+  invoices: Invoice[];
   onClose: () => void;
   onSaved: () => void;
 };
@@ -19,10 +21,16 @@ const METHODS = [
   { value: 'outro', label: 'Outro' },
 ];
 
-export default function PaymentModal({ invoice, onClose, onSaved }: Props) {
-  const isReceipt = ['FT', 'ND'].includes(invoice.document_type || '');
-  const remaining = Number(invoice.total) - Number(invoice.amount_paid ?? 0);
-  const [amount, setAmount] = useState<string>(remaining.toFixed(2));
+export default function PaymentModal({ invoices, onClose, onSaved }: Props) {
+  // Se for apenas uma factura
+  const isSingle = invoices.length === 1;
+  const isReceipt = invoices.some(inv => ['FT', 'ND'].includes(inv.document_type || ''));
+  
+  const totalRemaining = invoices.reduce((sum, inv) => sum + (Number(inv.total) - Number(inv.amount_paid ?? 0)), 0);
+  const totalOriginal = invoices.reduce((sum, inv) => sum + Number(inv.total), 0);
+  const totalPaid = invoices.reduce((sum, inv) => sum + Number(inv.amount_paid ?? 0), 0);
+
+  const [amount, setAmount] = useState<string>(totalRemaining.toFixed(2));
   const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().slice(0, 10));
   const [method, setMethod] = useState('transferencia');
   const [reference, setReference] = useState('');
@@ -33,15 +41,29 @@ export default function PaymentModal({ invoice, onClose, onSaved }: Props) {
     e.preventDefault();
     const amt = Number(amount);
     if (!Number.isFinite(amt) || amt <= 0) { toast.error('Valor inválido'); return; }
-    if (amt > remaining + 0.01) { toast.error(`Valor excede o remanescente (${formatAOA(remaining)})`); return; }
+    if (amt > totalRemaining + 0.01) { toast.error(`Valor excede o remanescente (${formatAOA(totalRemaining)})`); return; }
+    
     setSaving(true);
+    
+    // Distribuir o valor pelas facturas caso seja menor que o total
+    let remainingAmountToDistribute = amt;
+    const allocations: { invoice_id: string, amount: number }[] = [];
+    
+    // Sort invoices by issued_at implicitly (assume they are passed in order, or just iterate)
+    for (const inv of invoices) {
+       if (remainingAmountToDistribute <= 0) break;
+       const invRemaining = Number(inv.total) - Number(inv.amount_paid ?? 0);
+       const allocAmount = Math.min(invRemaining, remainingAmountToDistribute);
+       allocations.push({ invoice_id: inv.id, amount: allocAmount });
+       remainingAmountToDistribute -= allocAmount;
+    }
+
     try {
       const res = await fetch('/api/payments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          invoice_id: invoice.id,
-          amount: amt,
+          allocations,
           payment_date: new Date(paymentDate).toISOString(),
           method, reference, notes,
         }),
@@ -61,20 +83,25 @@ export default function PaymentModal({ invoice, onClose, onSaved }: Props) {
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 animate-fade-in" onClick={onClose}>
       <div className="bg-background rounded-lg shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between p-4 border-b">
-          <h2 className="text-lg font-semibold">{isReceipt ? 'Emitir Recibo' : 'Registar pagamento'}</h2>
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            {!isSingle && <ListChecks className="w-5 h-5 text-primary" />}
+            {isReceipt ? 'Emitir Recibo' : 'Registar pagamento'}
+            {!isSingle && <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full ml-2">{invoices.length} facturas</span>}
+          </h2>
           <button onClick={onClose} className="p-1 hover:bg-secondary rounded"><X className="w-5 h-5" /></button>
         </div>
         <form onSubmit={handleSubmit} className="p-4 space-y-4">
           <div className="bg-secondary/50 rounded p-3 text-sm space-y-1">
-            <div className="flex justify-between"><span className="text-muted-foreground">Factura</span><span className="font-mono font-semibold">{invoice.invoice_number}</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Total</span><span className="font-mono">{formatAOA(Number(invoice.total))}</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Já recebido</span><span className="font-mono">{formatAOA(Number(invoice.amount_paid ?? 0))}</span></div>
-            <div className="flex justify-between border-t pt-1 mt-1"><span className="font-medium">Remanescente</span><span className="font-mono font-semibold text-primary">{formatAOA(remaining)}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">{isSingle ? 'Factura' : 'Facturas selecionadas'}</span><span className="font-mono font-semibold">{isSingle ? invoices[0].invoice_number : `${invoices.length} docs`}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Total original</span><span className="font-mono">{formatAOA(totalOriginal)}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Já recebido</span><span className="font-mono">{formatAOA(totalPaid)}</span></div>
+            <div className="flex justify-between border-t pt-1 mt-1"><span className="font-medium">Remanescente</span><span className="font-mono font-semibold text-primary">{formatAOA(totalRemaining)}</span></div>
           </div>
 
           <div>
             <label className="block text-sm font-medium mb-1">Valor recebido *</label>
-            <input type="number" step="0.01" min="0.01" max={remaining} value={amount} onChange={(e) => setAmount(e.target.value)} required className="w-full px-3 h-10 rounded border border-border bg-background text-sm font-mono focus:ring-2 focus:ring-primary focus:border-primary" />
+            <input type="number" step="0.01" min="0.01" max={totalRemaining} value={amount} onChange={(e) => setAmount(e.target.value)} required className="w-full px-3 h-10 rounded border border-border bg-background text-sm font-mono focus:ring-2 focus:ring-primary focus:border-primary" />
+            {!isSingle && Number(amount) < totalRemaining && <p className="text-xs text-muted-foreground mt-1">O valor será distribuído pelas facturas por ordem de emissão.</p>}
           </div>
 
           <div className="grid grid-cols-2 gap-3">

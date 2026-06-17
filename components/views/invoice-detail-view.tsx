@@ -377,7 +377,7 @@ export default function InvoiceDetailView({ id }: { id: string }) {
 
       {showPaymentModal && (
         <PaymentModal
-          invoice={{ id: inv.id, invoice_number: inv.invoice_number, total: inv.total, amount_paid: inv.amount_paid, document_type: inv.document_type }}
+          invoices={[{ id: inv.id, invoice_number: inv.invoice_number, total: inv.total, amount_paid: inv.amount_paid, document_type: inv.document_type }]}
           onClose={() => setShowPaymentModal(false)}
           onSaved={() => { setShowPaymentModal(false); load(); loadPayments(); }}
         />

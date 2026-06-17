@@ -1,10 +1,12 @@
 'use client';
 
-import { ArrowLeft, Edit, Mail, MapPin, Phone, Building2, Download, AlertTriangle, Loader2 } from 'lucide-react';
+import { useState } from 'react';
+import { ArrowLeft, Edit, Mail, MapPin, Phone, Building2, Download, AlertTriangle, Loader2, DollarSign } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { formatAOA, formatDateTime, cn } from '@/lib/utils';
 import { useResource } from '@/lib/hooks/use-resource';
+import PaymentModal from '@/components/modals/payment-modal';
 
 type Client = { id: string; name: string; nif?: string; email?: string; phone?: string; address?: string; is_active: boolean };
 type Invoice = { id: string; invoice_number: string; total: number; amount_paid: number; status: string; payment_status: string; issued_at: string; document_type: string; };
@@ -13,7 +15,10 @@ export default function ClientDetailView({ id }: { id: string }) {
   const router = useRouter();
   
   const { data: clientData, loading: loadingClient } = useResource<{ client: Client }>(`/api/clients/${id}`);
-  const { data: invData, loading: loadingInv } = useResource<{ invoices: Invoice[] }>(`/api/invoices?client_id=${id}&page_size=200`);
+  const { data: invData, loading: loadingInv, reload: reloadInv } = useResource<{ invoices: Invoice[] }>(`/api/invoices?client_id=${id}&page_size=200`);
+
+  const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<string[]>([]);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
 
   if (loadingClient) return <div className="flex justify-center p-20"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
   if (!clientData?.client) return <div className="p-10 text-center text-muted-foreground">Cliente não encontrado</div>;
@@ -25,6 +30,12 @@ export default function ClientDetailView({ id }: { id: string }) {
   const totalRevenue = fiscalInvoices.reduce((sum, inv) => sum + inv.total, 0);
   const totalPaid = fiscalInvoices.reduce((sum, inv) => sum + (inv.amount_paid ?? 0), 0);
   const totalDebt = totalRevenue - totalPaid;
+
+  const toggleSelection = (invId: string) => {
+    setSelectedInvoiceIds(prev => prev.includes(invId) ? prev.filter(i => i !== invId) : [...prev, invId]);
+  };
+
+  const selectedInvoicesData = invoices.filter(inv => selectedInvoiceIds.includes(inv.id));
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -93,13 +104,21 @@ export default function ClientDetailView({ id }: { id: string }) {
           <div className="ms-card h-full flex flex-col">
             <div className="px-5 py-4 border-b flex items-center justify-between">
               <h3 className="font-semibold flex items-center gap-2"><Building2 className="w-4 h-4 text-primary" /> Conta Corrente</h3>
-              <div className="text-xs text-muted-foreground">{invoices.length} faturas registadas</div>
+              
+              {selectedInvoiceIds.length > 0 ? (
+                <button onClick={() => setShowPaymentModal(true)} className="px-3 py-1.5 text-xs font-medium bg-success text-success-foreground rounded shadow hover:bg-success/90 inline-flex items-center gap-2">
+                  <DollarSign className="w-3.5 h-3.5" /> Liquidar ({selectedInvoiceIds.length})
+                </button>
+              ) : (
+                <div className="text-xs text-muted-foreground">{invoices.length} movimentos</div>
+              )}
             </div>
             
             <div className="flex-1 overflow-x-auto rounded-b-md">
               <table className="w-full text-[13px]">
                 <thead className="bg-muted/50 sticky top-0 border-b">
                   <tr className="text-left font-medium text-muted-foreground">
+                    <th className="py-2.5 px-3 w-10"></th>
                     <th className="py-2.5 px-3">Documento</th>
                     <th className="py-2.5 px-3">Data</th>
                     <th className="py-2.5 px-3 text-right">Débito</th>
@@ -110,9 +129,9 @@ export default function ClientDetailView({ id }: { id: string }) {
                 </thead>
                 <tbody className="divide-y divide-border">
                   {loadingInv ? (
-                    <tr><td colSpan={6} className="py-10 text-center"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground mx-auto" /></td></tr>
+                    <tr><td colSpan={7} className="py-10 text-center"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground mx-auto" /></td></tr>
                   ) : invoices.length === 0 ? (
-                    <tr><td colSpan={6} className="py-10 text-center text-muted-foreground">Sem movimentos.</td></tr>
+                    <tr><td colSpan={7} className="py-10 text-center text-muted-foreground">Sem movimentos.</td></tr>
                   ) : (
                     (() => {
                       let currentBalance = 0;
@@ -124,32 +143,46 @@ export default function ClientDetailView({ id }: { id: string }) {
                         return { ...inv, debit, credit, balance: currentBalance, isCancelled };
                       }).reverse();
 
-                      return ledgerLines.map((line) => (
-                        <tr key={line.id} className="hover:bg-muted/40 even:bg-muted/10 transition-colors">
-                          <td className="py-2 px-3">
-                            <Link href={`/invoices/${line.id}`} className="font-mono font-medium text-primary hover:underline">
-                              {line.invoice_number}
-                            </Link>
-                          </td>
-                          <td className="py-2 px-3 text-muted-foreground">{formatDateTime(line.issued_at)}</td>
-                          <td className="py-2 px-3 text-right font-mono">{line.debit > 0 ? formatAOA(line.debit) : '-'}</td>
-                          <td className="py-2 px-3 text-right font-mono text-success">{line.credit > 0 ? formatAOA(line.credit) : '-'}</td>
-                          <td className="py-2 px-3 text-right font-mono font-semibold">
-                            {line.balance > 0 ? <span className="text-warning">{formatAOA(line.balance)}</span> : <span className="text-success">{formatAOA(line.balance)}</span>}
-                          </td>
-                          <td className="py-2 px-3 text-center">
-                            {line.isCancelled ? (
-                              <span className="inline-flex text-[10px] uppercase font-bold bg-destructive/10 text-destructive px-1.5 py-0.5 rounded">Cancelado</span>
-                            ) : line.payment_status === 'pago' ? (
-                              <span className="inline-flex text-[10px] uppercase font-bold bg-success/10 text-success px-1.5 py-0.5 rounded">Pago</span>
-                            ) : line.payment_status === 'parcial' ? (
-                              <span className="inline-flex text-[10px] uppercase font-bold bg-warning/10 text-warning px-1.5 py-0.5 rounded">Parcial</span>
-                            ) : (
-                              <span className="inline-flex text-[10px] uppercase font-bold bg-secondary text-muted-foreground px-1.5 py-0.5 rounded">Pendente</span>
-                            )}
-                          </td>
-                        </tr>
-                      ));
+                      return ledgerLines.map((line) => {
+                        const isPayable = !line.isCancelled && line.payment_status !== 'pago' && ['FT', 'ND'].includes(line.document_type);
+                        
+                        return (
+                          <tr key={line.id} className="hover:bg-muted/40 even:bg-muted/10 transition-colors">
+                            <td className="py-2 px-3 text-center">
+                               {isPayable && (
+                                 <input 
+                                   type="checkbox" 
+                                   checked={selectedInvoiceIds.includes(line.id)}
+                                   onChange={() => toggleSelection(line.id)}
+                                   className="rounded border-gray-300 text-primary focus:ring-primary w-4 h-4 cursor-pointer"
+                                 />
+                               )}
+                            </td>
+                            <td className="py-2 px-3">
+                              <Link href={`/invoices/${line.id}`} className="font-mono font-medium text-primary hover:underline">
+                                {line.invoice_number}
+                              </Link>
+                            </td>
+                            <td className="py-2 px-3 text-muted-foreground">{formatDateTime(line.issued_at)}</td>
+                            <td className="py-2 px-3 text-right font-mono">{line.debit > 0 ? formatAOA(line.debit) : '-'}</td>
+                            <td className="py-2 px-3 text-right font-mono text-success">{line.credit > 0 ? formatAOA(line.credit) : '-'}</td>
+                            <td className="py-2 px-3 text-right font-mono font-semibold">
+                              {line.balance > 0 ? <span className="text-warning">{formatAOA(line.balance)}</span> : <span className="text-success">{formatAOA(line.balance)}</span>}
+                            </td>
+                            <td className="py-2 px-3 text-center">
+                              {line.isCancelled ? (
+                                <span className="inline-flex text-[10px] uppercase font-bold bg-destructive/10 text-destructive px-1.5 py-0.5 rounded">Cancelado</span>
+                              ) : line.payment_status === 'pago' ? (
+                                <span className="inline-flex text-[10px] uppercase font-bold bg-success/10 text-success px-1.5 py-0.5 rounded">Pago</span>
+                              ) : line.payment_status === 'parcial' ? (
+                                <span className="inline-flex text-[10px] uppercase font-bold bg-warning/10 text-warning px-1.5 py-0.5 rounded">Parcial</span>
+                              ) : (
+                                <span className="inline-flex text-[10px] uppercase font-bold bg-secondary text-muted-foreground px-1.5 py-0.5 rounded">Pendente</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      });
                     })()
                   )}
                 </tbody>
@@ -158,6 +191,18 @@ export default function ClientDetailView({ id }: { id: string }) {
           </div>
         </div>
       </div>
+      
+      {showPaymentModal && selectedInvoicesData.length > 0 && (
+        <PaymentModal
+          invoices={selectedInvoicesData}
+          onClose={() => setShowPaymentModal(false)}
+          onSaved={() => {
+            setShowPaymentModal(false);
+            setSelectedInvoiceIds([]);
+            reloadInv();
+          }}
+        />
+      )}
     </div>
   );
 }

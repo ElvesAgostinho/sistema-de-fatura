@@ -24,30 +24,72 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const ctx = await getCurrentUserContext();
   if (!ctx?.profile) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  
   const body = await req.json().catch(() => ({}));
-  const { invoice_id, amount, payment_date, method, reference, notes } = body ?? {};
-  if (!invoice_id) return NextResponse.json({ error: 'invoice_id obrigatório' }, { status: 400 });
-  const amt = Number(amount);
-  if (!Number.isFinite(amt) || amt <= 0) return NextResponse.json({ error: 'Valor inválido' }, { status: 400 });
+  const { payment_date, method, reference, notes } = body ?? {};
+  
+  // Normalizar entrada para array de alocações
+  let allocations: { invoice_id: string, amount: number }[] = [];
+  if (body.allocations && Array.isArray(body.allocations) && body.allocations.length > 0) {
+    allocations = body.allocations;
+  } else if (body.invoice_id && body.amount) {
+    allocations = [{ invoice_id: body.invoice_id, amount: Number(body.amount) }];
+  }
+
+  if (allocations.length === 0) {
+    return NextResponse.json({ error: 'Nenhuma factura fornecida para pagamento' }, { status: 400 });
+  }
+
   const admin = createAdminClient();
   const companyId = ctx.profile.company_id;
+  
+  let totalAmount = 0;
+  const invoicesToPay: any[] = [];
+  let clientId = null;
+  let clientName = null;
+  let clientNif = null;
+  let clientAddress = null;
 
-  // Load invoice
-  const { data: inv, error: invErr } = await admin.from('invoices')
-    .select('id, invoice_number, total, amount_paid, status, payment_status, client_id, client_name, client_nif, client_address, document_type')
-    .eq('id', invoice_id).eq('company_id', companyId).single();
-  if (invErr || !inv) return NextResponse.json({ error: 'Fatura não encontrada' }, { status: 404 });
-  if (inv.status !== 'issued') return NextResponse.json({ error: 'Apenas facturas emitidas podem receber pagamentos' }, { status: 400 });
+  // 1. Validar todas as facturas
+  for (const alloc of allocations) {
+    const amt = Number(alloc.amount);
+    if (!Number.isFinite(amt) || amt <= 0) {
+      return NextResponse.json({ error: `Valor inválido para a factura ${alloc.invoice_id}` }, { status: 400 });
+    }
+    
+    const { data: inv, error: invErr } = await admin.from('invoices')
+      .select('id, invoice_number, total, amount_paid, status, payment_status, client_id, client_name, client_nif, client_address, document_type')
+      .eq('id', alloc.invoice_id).eq('company_id', companyId).single();
+      
+    if (invErr || !inv) return NextResponse.json({ error: `Fatura ${alloc.invoice_id} não encontrada` }, { status: 404 });
+    if (inv.status !== 'issued') return NextResponse.json({ error: `A factura ${inv.invoice_number} não está emitida` }, { status: 400 });
 
-  const total = Number(inv.total ?? 0);
-  const alreadyPaid = Number(inv.amount_paid ?? 0);
-  const remaining = total - alreadyPaid;
-  if (amt > remaining + 0.01) return NextResponse.json({ error: `Valor excede o remanescente (${remaining.toFixed(2)} AOA)` }, { status: 400 });
+    const remaining = Number(inv.total ?? 0) - Number(inv.amount_paid ?? 0);
+    if (amt > remaining + 0.01) {
+      return NextResponse.json({ error: `Valor excede o remanescente na factura ${inv.invoice_number} (${remaining.toFixed(2)} AOA)` }, { status: 400 });
+    }
+
+    if (!clientId) {
+      clientId = inv.client_id;
+      clientName = inv.client_name;
+      clientNif = inv.client_nif;
+      clientAddress = inv.client_address;
+    } else if (clientId !== inv.client_id) {
+      return NextResponse.json({ error: 'Todas as facturas liquidadas de uma vez devem pertencer ao mesmo cliente' }, { status: 400 });
+    }
+
+    totalAmount += amt;
+    invoicesToPay.push({ inv, amount: amt });
+  }
 
   let newReceiptInvoice: any = null;
+  const isMultiple = invoicesToPay.length > 1;
+  const relatedDocStr = invoicesToPay.map(i => i.inv.invoice_number).join(', ');
 
-  // Se for Factura (FT) ou Nota de Débito (ND), geramos um Recibo (RC)
-  if (['FT', 'ND'].includes(inv.document_type)) {
+  // Se tem facturas tipo FT ou ND, geramos RC
+  const hasPayableDocs = invoicesToPay.some(i => ['FT', 'ND'].includes(i.inv.document_type));
+  
+  if (hasPayableDocs) {
     const year = new Date().getFullYear();
     const maxAttempts = 3;
     let attempt = 0;
@@ -65,7 +107,7 @@ export async function POST(req: Request) {
       const prevHash = lastInvoice?.hash || '';
       const issuedAt = payment_date || new Date().toISOString();
       const hash = generateInvoiceHash({ 
-        invoice_number: sequence, client_nif: inv.client_nif, total: amt, issued_at: issuedAt, previous_hash: prevHash 
+        invoice_number: sequence, client_nif: clientNif, total: totalAmount, issued_at: issuedAt, previous_hash: prevHash 
       });
 
       let signature: string | null = null;
@@ -73,7 +115,7 @@ export async function POST(req: Request) {
       try {
         const { data: config } = await admin.from('fiscal_config').select('chave_privada').eq('company_id', companyId).maybeSingle();
         if (config?.chave_privada) {
-          const payload = buildInvoiceSignaturePayload({ invoice_number: sequence, issued_at: issuedAt, total: amt, previous_hash: prevHash });
+          const payload = buildInvoiceSignaturePayload({ invoice_number: sequence, issued_at: issuedAt, total: totalAmount, previous_hash: prevHash });
           signature = signWithPrivateKey(config.chave_privada, payload);
 
           const { data: keyRow } = await admin.from('fiscal_keys').select('id').eq('company_id', companyId).order('created_at', { ascending: false }).limit(1).maybeSingle();
@@ -81,14 +123,17 @@ export async function POST(req: Request) {
         }
       } catch (sigErr) { console.error('Signing failed for receipt', sigErr); }
 
+      // Truncate relatedDocStr to 100 chars se a base de dados tiver limite
+      const safeRelatedDoc = relatedDocStr.length > 100 ? relatedDocStr.substring(0, 97) + '...' : relatedDocStr;
+
       const { data: ins, error: insErr } = await admin.from('invoices').insert({
-        company_id: companyId, client_id: inv.client_id, invoice_number: sequence, document_type: 'RC',
-        subtotal: amt, tax: 0, total: amt, status: 'issued', hash, signature,
+        company_id: companyId, client_id: clientId, invoice_number: sequence, document_type: 'RC',
+        subtotal: totalAmount, tax: 0, total: totalAmount, status: 'issued', hash, signature,
         signature_key_id: signatureKeyId, previous_hash: prevHash || null,
-        tax_exempt: true, tax_exemption_reason: 'M00', // Pagamentos não são tributáveis
-        related_document: inv.invoice_number, created_by: ctx.profile.id, issued_at: issuedAt,
-        client_name: inv.client_name, client_nif: inv.client_nif, client_address: inv.client_address,
-        amount_paid: amt, payment_status: 'pago'
+        tax_exempt: true, tax_exemption_reason: 'M00',
+        related_document: safeRelatedDoc, created_by: ctx.profile.id, issued_at: issuedAt,
+        client_name: clientName, client_nif: clientNif, client_address: clientAddress,
+        amount_paid: totalAmount, payment_status: 'pago'
       }).select().single();
 
       if (insErr) {
@@ -101,68 +146,96 @@ export async function POST(req: Request) {
 
     if (!newReceiptInvoice) return NextResponse.json({ error: 'Falha ao gerar Recibo (concorrência)' }, { status: 500 });
 
-    // Item do recibo
-    await admin.from('invoice_items').insert({
-      invoice_id: newReceiptInvoice.id,
-      description: `Liquidação da Factura ${inv.invoice_number}`,
-      quantity: 1,
-      price: amt,
-      tax_rate: 0,
-      total: amt
-    });
+    // Inserir linhas do recibo (uma por factura)
+    for (const item of invoicesToPay) {
+      await admin.from('invoice_items').insert({
+        invoice_id: newReceiptInvoice.id,
+        description: `Liquidação da Factura ${item.inv.invoice_number}`,
+        quantity: 1,
+        price: item.amount,
+        tax_rate: 0,
+        total: item.amount
+      });
 
-    // Audit log para recibo
+      try {
+        await admin.from('receipt_allocations').insert({
+          receipt_id: newReceiptInvoice.id,
+          invoice_id: item.inv.id,
+          amount: item.amount
+        });
+      } catch (e) {}
+    }
+
     await admin.from('audit_logs').insert({
       user_id: ctx.profile.id, company_id: companyId,
       action: 'invoice.create', entity: 'invoice', entity_id: newReceiptInvoice.id,
-      details: { invoice_number: newReceiptInvoice.invoice_number, total: amt, client_nif: inv.client_nif, hash: newReceiptInvoice.hash },
+      details: { invoice_number: newReceiptInvoice.invoice_number, total: totalAmount, client_nif: clientNif, hash: newReceiptInvoice.hash, multiple: isMultiple },
     });
   }
 
-  // Create payment record
-  const { data: payment, error: payErr } = await admin.from('payments').insert({
-    company_id: companyId,
-    invoice_id,
-    amount: amt,
-    payment_date: payment_date || new Date().toISOString(),
-    method: method || null,
-    reference: reference || null,
-    notes: notes || null,
-    created_by: ctx.profile.id,
-  }).select().single();
-  if (payErr) return NextResponse.json({ error: payErr.message }, { status: 500 });
+  const processedPayments = [];
 
-  // Update invoice amount_paid + payment_status
-  const newPaid = alreadyPaid + amt;
-  const newStatus = newPaid >= total - 0.01 ? 'pago' : 'parcial';
-  const { error: updErr } = await admin.from('invoices')
-    .update({ amount_paid: newPaid, payment_status: newStatus })
-    .eq('id', invoice_id);
-  if (updErr) {
-    // Rollback payment
-    await admin.from('payments').delete().eq('id', payment.id);
-    return NextResponse.json({ error: 'Falha ao actualizar factura: ' + updErr.message }, { status: 500 });
+  // Actualizar Facturas Originais e Registar Pagamentos
+  for (const item of invoicesToPay) {
+    const { inv, amount } = item;
+    
+    // Create payment record
+    const paymentPayload: any = {
+      company_id: companyId,
+      invoice_id: inv.id,
+      amount: amount,
+      payment_date: payment_date || new Date().toISOString(),
+      method: method || null,
+      reference: reference || null,
+      notes: notes || (isMultiple ? `Pagamento múltiplo c/ ${relatedDocStr}` : null),
+      created_by: ctx.profile.id,
+    };
+    
+    if (newReceiptInvoice) {
+      paymentPayload.receipt_id = newReceiptInvoice.id;
+    }
+
+    let { data: payment, error: payErr } = await admin.from('payments').insert(paymentPayload).select().single();
+    if (payErr) {
+        // Fallback: se receipt_id não existir na DB removemos e tentamos de novo
+        delete paymentPayload.receipt_id;
+        const fallback = await admin.from('payments').insert(paymentPayload).select().single();
+        payment = fallback.data;
+        payErr = fallback.error;
+    }
+    
+    if (payErr) {
+       console.error("Payment insert error:", payErr);
+       continue;
+    }
+
+    processedPayments.push(payment);
+
+    // Update invoice amount_paid + payment_status
+    const newPaid = Number(inv.amount_paid ?? 0) + amount;
+    const newStatus = newPaid >= Number(inv.total) - 0.01 ? 'pago' : 'parcial';
+    
+    await admin.from('invoices')
+      .update({ amount_paid: newPaid, payment_status: newStatus })
+      .eq('id', inv.id);
+
+    await admin.from('audit_logs').insert({
+      company_id: companyId,
+      user_id: ctx.profile.id,
+      action: 'payment.create',
+      entity: 'payment',
+      entity_id: payment?.id || inv.id,
+      details: { invoice_id: inv.id, amount, method },
+    });
   }
 
-  // Audit log for payment
-  await admin.from('audit_logs').insert({
-    company_id: companyId,
-    user_id: ctx.profile.id,
-    action: 'payment.create',
-    entity: 'payment',
-    entity_id: payment.id,
-    details: { invoice_id, amount: amt, method },
-  });
-
-  // Invalidate cache
   if (redis) {
     redis.del(CacheKeys.dashboardStats(companyId)).catch(() => {});
     redis.del(CacheKeys.invoiceList(companyId, 'default')).catch(() => {});
   }
 
   return NextResponse.json({ 
-    payment, 
-    invoice: { amount_paid: newPaid, payment_status: newStatus },
+    payments: processedPayments, 
     receipt: newReceiptInvoice 
   });
 }
