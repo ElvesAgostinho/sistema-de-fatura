@@ -5,6 +5,7 @@ import { Plus, Search, Users, Loader2, X, RefreshCw, Pencil, Trash2 } from 'luci
 import SupplierModal from '@/components/modals/supplier-modal';
 import ConfirmModal from '@/components/modals/confirm-modal';
 import ExportButton from '@/components/export-button';
+import Link from 'next/link';
 import { toast } from 'sonner';
 import { useResource, invalidateCache } from '@/lib/hooks/use-resource';
 import { useDebounced } from '@/lib/hooks/use-debounced';
@@ -120,7 +121,7 @@ export default function SuppliersView() {
                 <tbody>
                   {suppliers.map((s) => (
                     <tr key={s.id} className="border-t hover:bg-secondary/40">
-                      <td className="py-3 px-4 font-medium">{s.name}</td>
+                      <td className="py-3 px-4 font-medium"><Link href={`/suppliers/${s.id}`} className="text-primary hover:underline">{s.name}</Link></td>
                       <td className="py-3 px-4 font-mono text-xs">{s.nif}</td>
                       <td className="py-3 px-4 text-muted-foreground">{s.phone ?? '-'}</td>
                       <td className="py-3 px-4 text-muted-foreground">{s.email ?? '-'}</td>

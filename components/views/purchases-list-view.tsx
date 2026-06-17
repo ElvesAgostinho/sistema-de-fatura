@@ -13,7 +13,9 @@ type Purchase = {
   id: string; 
   purchase_number: string; 
   total: number; 
+  amount_paid: number;
   status: string; 
+  payment_status: string;
   issued_at: string; 
   attachment_path?: string | null;
   supplier: { name: string; nif: string } 
@@ -88,6 +90,7 @@ export default function PurchasesListView() {
                   <th className="py-4 px-6 font-bold">Nº Fatura</th>
                   <th className="py-4 px-6 font-bold">Fornecedor</th>
                   <th className="py-4 px-6 font-bold">Total</th>
+                  <th className="py-4 px-6 font-bold">Falta Pagar</th>
                   <th className="py-4 px-6 font-bold">Anexo</th>
                   <th className="py-4 px-6 font-bold">Estado</th>
                   <th className="py-3 px-4 text-right">Ações</th>
@@ -103,6 +106,7 @@ export default function PurchasesListView() {
                       <div className="text-[10px] text-muted-foreground font-mono uppercase tracking-tighter">{p.supplier?.nif}</div>
                     </td>
                     <td className="py-4 px-6 font-mono font-black text-primary">{formatAOA(p.total)}</td>
+                    <td className="py-4 px-6 font-mono font-bold text-destructive">{formatAOA(Number(p.total) - Number(p.amount_paid ?? 0))}</td>
                     <td className="py-4 px-6">
                       {p.attachment_path ? (
                         <button 
@@ -117,9 +121,19 @@ export default function PurchasesListView() {
                       )}
                     </td>
                     <td className="py-4 px-6">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest bg-emerald-100 text-emerald-800 border border-emerald-200">
-                        Concluída
-                      </span>
+                      {p.payment_status === 'pago' ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest bg-emerald-100 text-emerald-800 border border-emerald-200">
+                          Pago
+                        </span>
+                      ) : p.payment_status === 'parcial' ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest bg-warning/20 text-warning-foreground border border-warning/30">
+                          Parcial
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest bg-destructive/10 text-destructive border border-destructive/20">
+                          Pendente
+                        </span>
+                      )}
                     </td>
                     <td className="py-4 px-6 text-right">
                       <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">

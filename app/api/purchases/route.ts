@@ -19,7 +19,7 @@ export async function GET(req: Request) {
   const admin = createAdminClient();
   let query = admin
     .from('purchases')
-    .select('id, purchase_number, total, status, issued_at, attachment_path, supplier:suppliers(name, nif)', { count: 'exact' })
+    .select('id, purchase_number, total, amount_paid, status, payment_status, issued_at, attachment_path, supplier:suppliers(name, nif)', { count: 'exact' })
     .eq('company_id', ctx.profile.company_id);
 
   if (supplierId) query = query.eq('supplier_id', supplierId);
