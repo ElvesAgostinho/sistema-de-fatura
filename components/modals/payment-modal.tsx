@@ -6,7 +6,7 @@ import toast from 'react-hot-toast';
 import { formatAOA } from '@/lib/utils';
 
 type Props = {
-  invoice: { id: string; invoice_number: string; total: number; amount_paid?: number };
+  invoice: { id: string; invoice_number: string; total: number; amount_paid?: number; document_type?: string };
   onClose: () => void;
   onSaved: () => void;
 };
@@ -20,6 +20,7 @@ const METHODS = [
 ];
 
 export default function PaymentModal({ invoice, onClose, onSaved }: Props) {
+  const isReceipt = ['FT', 'ND'].includes(invoice.document_type || '');
   const remaining = Number(invoice.total) - Number(invoice.amount_paid ?? 0);
   const [amount, setAmount] = useState<string>(remaining.toFixed(2));
   const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().slice(0, 10));
@@ -47,7 +48,7 @@ export default function PaymentModal({ invoice, onClose, onSaved }: Props) {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Erro ao registar pagamento');
-      toast.success('Pagamento registado');
+      toast.success(isReceipt ? 'Recibo emitido com sucesso' : 'Pagamento registado');
       onSaved();
     } catch (err: any) {
       toast.error(err.message || 'Erro ao registar pagamento');
@@ -60,7 +61,7 @@ export default function PaymentModal({ invoice, onClose, onSaved }: Props) {
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 animate-fade-in" onClick={onClose}>
       <div className="bg-background rounded-lg shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between p-4 border-b">
-          <h2 className="text-lg font-semibold">Registar pagamento</h2>
+          <h2 className="text-lg font-semibold">{isReceipt ? 'Emitir Recibo' : 'Registar pagamento'}</h2>
           <button onClick={onClose} className="p-1 hover:bg-secondary rounded"><X className="w-5 h-5" /></button>
         </div>
         <form onSubmit={handleSubmit} className="p-4 space-y-4">
@@ -101,7 +102,7 @@ export default function PaymentModal({ invoice, onClose, onSaved }: Props) {
 
           <div className="flex justify-end gap-2 pt-2 border-t">
             <button type="button" onClick={onClose} className="px-4 h-10 rounded border border-border bg-background text-sm font-medium hover:bg-secondary">Cancelar</button>
-            <button type="submit" disabled={saving} className="ms-btn-primary disabled:opacity-60">{saving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Registar'}</button>
+            <button type="submit" disabled={saving} className="ms-btn-primary disabled:opacity-60">{saving ? <Loader2 className="w-4 h-4 animate-spin" /> : (isReceipt ? 'Emitir Recibo' : 'Registar')}</button>
           </div>
         </form>
       </div>

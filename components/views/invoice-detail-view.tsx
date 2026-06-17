@@ -168,7 +168,7 @@ export default function InvoiceDetailView({ id }: { id: string }) {
           </Link>
           <button onClick={onDownloadPdf} className="ms-btn-primary"><Download className="w-4 h-4" /> PDF</button>
           {!cancelled && <button onClick={() => setShowEmailConfirm(true)} className="px-4 py-2 rounded text-sm font-medium bg-primary/10 text-primary hover:bg-primary/20 inline-flex items-center gap-2"><Mail className="w-4 h-4" /> Enviar por email</button>}
-          {!cancelled && inv.payment_status !== 'pago' && isAdmin && <button onClick={() => setShowPaymentModal(true)} className="px-4 py-2 rounded text-sm font-medium bg-success/10 text-success hover:bg-success/20 inline-flex items-center gap-2"><DollarSign className="w-4 h-4" /> Registar pagamento</button>}
+          {!cancelled && inv.payment_status !== 'pago' && isAdmin && <button onClick={() => setShowPaymentModal(true)} className="px-4 py-2 rounded text-sm font-medium bg-success/10 text-success hover:bg-success/20 inline-flex items-center gap-2"><DollarSign className="w-4 h-4" /> {['FT', 'ND'].includes(inv.document_type) ? 'Emitir Recibo' : 'Registar pagamento'}</button>}
           {!cancelled && isAdmin && <button onClick={() => setCancelOpen(true)} className="px-4 py-2 rounded text-sm font-medium bg-destructive/10 text-destructive hover:bg-destructive/20 inline-flex items-center gap-2"><Ban className="w-4 h-4" /> Cancelar</button>}
         </div>
       </div>
@@ -278,7 +278,7 @@ export default function InvoiceDetailView({ id }: { id: string }) {
         <div className="ms-card overflow-hidden">
           <div className="px-5 py-3 border-b bg-secondary/40 flex items-center justify-between">
             <h3 className="font-semibold flex items-center gap-2"><DollarSign className="w-4 h-4 text-primary" /> Pagamentos recebidos</h3>
-            {inv.payment_status !== 'pago' && <button onClick={() => setShowPaymentModal(true)} className="text-xs px-3 py-1 rounded bg-primary text-primary-foreground font-medium hover:bg-primary/90">+ Registar</button>}
+            {inv.payment_status !== 'pago' && <button onClick={() => setShowPaymentModal(true)} className="text-xs px-3 py-1 rounded bg-primary text-primary-foreground font-medium hover:bg-primary/90">+ {['FT', 'ND'].includes(inv.document_type) ? 'Emitir Recibo' : 'Registar'}</button>}
           </div>
           {loadingPayments ? (
             <div className="p-10 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
@@ -377,7 +377,7 @@ export default function InvoiceDetailView({ id }: { id: string }) {
 
       {showPaymentModal && (
         <PaymentModal
-          invoice={{ id: inv.id, invoice_number: inv.invoice_number, total: inv.total, amount_paid: inv.amount_paid }}
+          invoice={{ id: inv.id, invoice_number: inv.invoice_number, total: inv.total, amount_paid: inv.amount_paid, document_type: inv.document_type }}
           onClose={() => setShowPaymentModal(false)}
           onSaved={() => { setShowPaymentModal(false); load(); loadPayments(); }}
         />
