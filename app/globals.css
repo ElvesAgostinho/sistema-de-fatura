@@ -119,36 +119,57 @@
 
   /* ── Botões: mínimo 44px de altura para toque (Apple HIG / WCAG) ── */
   .ms-btn-primary {
-    @apply bg-primary text-primary-foreground hover:bg-primary/90
-           px-4 min-h-[44px] rounded-md font-medium text-sm
+    background-color: rgb(var(--primary));
+    color: rgb(var(--primary-foreground));
+    @apply px-4 min-h-[44px] rounded-md font-medium text-sm
            transition-colors inline-flex items-center gap-2
            active:scale-[0.97] select-none;
+  }
+  .ms-btn-primary:hover {
+    background-color: rgb(var(--primary) / 0.9);
   }
 
   .ms-btn-secondary {
-    @apply bg-secondary text-secondary-foreground hover:bg-secondary/80
-           border border-border px-4 min-h-[44px] rounded-md font-medium text-sm
+    background-color: rgb(var(--secondary));
+    color: rgb(var(--secondary-foreground));
+    border-color: rgb(var(--border));
+    @apply border px-4 min-h-[44px] rounded-md font-medium text-sm
            transition-colors inline-flex items-center gap-2
            active:scale-[0.97] select-none;
+  }
+  .ms-btn-secondary:hover {
+    background-color: rgb(var(--secondary) / 0.8);
   }
 
   .ms-btn-ghost {
-    @apply text-foreground hover:bg-secondary px-3 min-h-[44px] rounded-md
+    color: rgb(var(--foreground));
+    @apply px-3 min-h-[44px] rounded-md
            font-medium text-sm transition-colors inline-flex items-center gap-2
            active:scale-[0.97] select-none;
   }
+  .ms-btn-ghost:hover {
+    background-color: rgb(var(--secondary));
+    color: rgb(var(--accent-foreground));
+  }
 
   .ms-btn-danger {
-    @apply bg-destructive/10 text-destructive hover:bg-destructive/20
-           border border-destructive/30 px-4 min-h-[44px] rounded-md font-medium text-sm
+    background-color: rgb(var(--destructive) / 0.1);
+    color: rgb(var(--destructive));
+    border-color: rgb(var(--destructive) / 0.3);
+    @apply border px-4 min-h-[44px] rounded-md font-medium text-sm
            transition-colors inline-flex items-center gap-2
            active:scale-[0.97] select-none;
   }
+  .ms-btn-danger:hover {
+    background-color: rgb(var(--destructive) / 0.2);
+  }
 
-  /* Ícone-botão: área táctil mínima 44px */
   .ms-icon-btn {
     @apply w-11 h-11 rounded-lg flex items-center justify-center
-           hover:bg-secondary transition-colors active:scale-95 select-none;
+           transition-colors active:scale-95 select-none;
+  }
+  .ms-icon-btn:hover {
+    background-color: rgb(var(--secondary));
   }
 
   .stat-card {
