@@ -9,7 +9,7 @@ type BeforeInstallPromptEvent = Event & {
 };
 
 const DISMISS_KEY = 'faturaao_install_dismissed_at';
-const DISMISS_DAYS = 7;
+const DISMISS_DAYS = 365;
 
 export default function InstallPrompt() {
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null);
