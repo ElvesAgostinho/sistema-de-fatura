@@ -74,7 +74,7 @@ export default function InstallPrompt() {
               Toque em <span className="font-semibold">Partilhar</span> → <span className="font-semibold">Adicionar ao Ecrã Principal</span> para instalar.
             </p>
           ) : (
-            <p className="text-xs text-muted-foreground mt-1">Use a aplicação offline, atalho no ecrã principal, experiência full-screen.</p>
+            <p className="text-xs text-muted-foreground mt-1">Use a aplicação online, atalho no ecrã principal, experiência full-screen.</p>
           )}
           <div className="flex gap-2 mt-3">
             {deferred && (
