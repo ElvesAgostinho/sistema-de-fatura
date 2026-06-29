@@ -4,7 +4,6 @@ import { ThemeProvider } from '@/components/theme-provider';
 import { Toaster } from '@/components/ui/sonner';
 import { ChunkLoadErrorHandler } from '@/components/chunk-load-error-handler';
 import SwRegister from '@/components/sw-register';
-import InstallPrompt from '@/components/install-prompt';
 import { ResourcePrefetcher } from '@/components/resource-prefetcher';
 import Script from 'next/script';
 
@@ -70,7 +69,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           {children}
           <Toaster richColors position="top-right" />
           <SwRegister />
-          <InstallPrompt />
           <ChunkLoadErrorHandler />
         </ThemeProvider>
       </body>
