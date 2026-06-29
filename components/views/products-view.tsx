@@ -65,7 +65,6 @@ export default function ProductsView() {
   const lowStockCount = all.filter((p) => p.track_stock && Number(p.quantity_in_stock ?? 0) <= Number(p.stock_alert_threshold ?? 0)).length;
 
   const onSaved = (p: Product, mode: 'create' | 'update') => {
-    invalidateCache('/api/products');
     mutate((prev) => {
       const list = prev?.products ?? [];
       if (mode === 'update') return { products: list.map((x) => x.id === p.id ? { ...x, ...p } : x) };
@@ -82,7 +81,6 @@ export default function ProductsView() {
       if (!r.ok) { toast.error(j?.error ?? 'Erro'); return; }
       if (j.archived) toast.info(j.message ?? 'Produto arquivado');
       else toast.success('Produto eliminado');
-      invalidateCache('/api/products');
       mutate((prev) => ({ products: (prev?.products ?? []).filter((x) => x.id !== confirm.id) }));
       setConfirm(null);
     } catch (e: any) {

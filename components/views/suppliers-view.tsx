@@ -30,7 +30,6 @@ export default function SuppliersView() {
   const firstLoad = loading && !data;
 
   const onSaved = (s: Supplier, mode: 'create' | 'update') => {
-    invalidateCache('/api/suppliers');
     mutate((prev) => {
       const list = prev?.suppliers ?? [];
       if (mode === 'update') return { suppliers: list.map((x) => x.id === s.id ? { ...x, ...s } : x) };
@@ -49,7 +48,6 @@ export default function SuppliersView() {
         return; 
       }
       toast.success('Fornecedor eliminado');
-      invalidateCache('/api/suppliers');
       mutate((prev) => ({ suppliers: (prev?.suppliers ?? []).filter((x) => x.id !== confirm.id) }));
       setConfirm(null);
     } catch (e: any) {

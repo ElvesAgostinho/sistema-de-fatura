@@ -39,7 +39,6 @@ export default function ClientsView() {
   const showEmpty = !loading && clients.length === 0;
 
   const onSaved = (c: Client, mode: 'create' | 'update') => {
-    invalidateCache('/api/clients');
     mutate((prev) => {
       const list = prev?.clients ?? [];
       if (mode === 'update') return { clients: list.map((x) => x.id === c.id ? { ...x, ...c } : x) };
