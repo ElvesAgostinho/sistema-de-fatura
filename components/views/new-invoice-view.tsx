@@ -41,7 +41,6 @@ export default function NewInvoiceView() {
   const [paymentMethod, setPaymentMethod] = useState<'Dinheiro'|'Multicaixa'|'Transferência'|'Cheque'>('Dinheiro');
   const [validUntil, setValidUntil] = useState('');
   const [transportDetails, setTransportDetails] = useState({ loadLocation: '', unloadLocation: '', licensePlate: '', startDate: '' });
-  const [servicePeriod, setServicePeriod] = useState({ start: invoiceDraft?.servicePeriod?.start ?? '', end: invoiceDraft?.servicePeriod?.end ?? '' });
   const [applyRetention, setApplyRetention] = useState(invoiceDraft?.applyRetention ?? false);
   const [submitting, setSubmitting] = useState(false);
   const [clientModal, setClientModal] = useState(false);
@@ -55,9 +54,9 @@ export default function NewInvoiceView() {
 
   useEffect(() => {
     if (mounted) {
-      setInvoiceDraft({ docType, relatedDocument, clientId, items, taxExempt, taxExemptionReason, applyRetention, servicePeriod });
+      setInvoiceDraft({ docType, relatedDocument, clientId, items, taxExempt, taxExemptionReason, applyRetention });
     }
-  }, [mounted, docType, relatedDocument, clientId, items, taxExempt, taxExemptionReason, applyRetention, servicePeriod, setInvoiceDraft]);
+  }, [mounted, docType, relatedDocument, clientId, items, taxExempt, taxExemptionReason, applyRetention, setInvoiceDraft]);
 
   const { data: clientsData, mutate: mutateClients } = useResource<{ clients: any[] }>('/api/clients', { ttl: 60_000 });
   const { data: productsData, mutate: mutateProducts } = useResource<{ products: any[] }>('/api/products', { ttl: 60_000 });
@@ -190,8 +189,6 @@ export default function NewInvoiceView() {
           payment_method: (docType === 'FR' || docType === 'RC') ? paymentMethod : null,
           valid_until: (docType === 'PP' || docType === 'OR') ? new Date(validUntil).toISOString() : null,
           transport_details: docType === 'GT' ? transportDetails : null,
-          service_start_date: servicePeriod.start || null,
-          service_end_date: servicePeriod.end || null,
           apply_retention: applyRetention,
         }),
       });
@@ -345,32 +342,6 @@ export default function NewInvoiceView() {
                 </div>
               </div>
             )}
-
-            {/* Período de Serviço */}
-            <div className="mt-4 pt-4 border-t border-border grid grid-cols-2 gap-4">
-              <div className="col-span-2">
-                <h4 className="text-sm font-semibold flex items-center gap-2">Período de Serviço <span className="text-[10px] font-normal text-muted-foreground px-2 py-0.5 bg-secondary rounded">Opcional</span></h4>
-                <p className="text-xs text-muted-foreground mt-1">Útil para Hotelaria (Check-in / Check-out), Transfers ou Avenças.</p>
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Data de Início</label>
-                <input
-                  type="date"
-                  value={servicePeriod.start}
-                  onChange={(e) => setServicePeriod({...servicePeriod, start: e.target.value})}
-                  className="w-full h-10 px-3 rounded border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Data de Fim</label>
-                <input
-                  type="date"
-                  value={servicePeriod.end}
-                  onChange={(e) => setServicePeriod({...servicePeriod, end: e.target.value})}
-                  className="w-full h-10 px-3 rounded border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                />
-              </div>
-            </div>
           </div>
 
           {/* Cliente */}

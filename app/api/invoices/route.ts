@@ -63,7 +63,7 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json();
-    const { client_id, items, tax_exempt, tax_exemption_reason, document_type, related_document, payment_method, valid_until, transport_details, service_start_date, service_end_date } = body ?? {};
+    const { client_id, items, tax_exempt, tax_exemption_reason, document_type, related_document, payment_method, valid_until, transport_details } = body ?? {};
 
     if (!client_id) return ApiResponse.error('Cliente obrigatório');
     if (!Array.isArray(items) || items.length === 0) return ApiResponse.error('Adicione pelo menos um item');
@@ -213,8 +213,6 @@ export async function POST(req: Request) {
         client_name: client.name, client_nif: client.nif, client_address: client.address,
         valid_until: (docType === 'PP' || docType === 'OR') ? valid_until : null,
         transport_details: docType === 'GT' ? transport_details : null,
-        service_start_date: service_start_date || null,
-        service_end_date: service_end_date || null,
         amount_paid: (docType === 'FR' || docType === 'RC') ? total : 0,
         payment_status: (docType === 'FR' || docType === 'RC') ? 'pago' : 'pendente'
       }).select().single();
