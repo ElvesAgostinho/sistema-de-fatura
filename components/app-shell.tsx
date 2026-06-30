@@ -50,7 +50,10 @@ const getXeroMenus = (role?: string, isPlatformAdmin?: boolean) => {
     baseMenus.splice(2, 0, {
       title: 'Contabilidade',
       items: [
-        { href: '/reports', label: 'Relatórios' },
+        { href: '/accounting/dashboard', label: 'Painel Central (Dashboard)' },
+        { href: '/accounting/closings', label: 'Fechos Globais (Diário/Mensal)' },
+        { divider: true },
+        { href: '/reports', label: 'Relatórios Simples' },
         { href: '/taxes', label: 'Impostos e SAF-T' },
         { href: '/audit', label: 'Auditoria' },
         { href: '/settings', label: 'Configurações Avançadas' },
