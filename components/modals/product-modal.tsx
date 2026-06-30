@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { X, Loader2, Package, Image as ImageIcon, BarChart3, Settings } from 'lucide-react';
 import { toast } from 'sonner';
+import { createClient } from '@/lib/supabase/client';
 
 type Product = {
   id?: string;
@@ -44,6 +45,41 @@ export default function ProductModal({ onClose, onSaved, initial }: {
     stock_alert_threshold: initial?.stock_alert_threshold ?? 0,
   });
   const [loading, setLoading] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const supabase = createClient();
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('Imagem muito grande (máx 2MB)');
+      return;
+    }
+
+    setUploadingImage(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
+      
+      const { data, error } = await supabase.storage
+        .from('products')
+        .upload(fileName, file);
+        
+      if (error) throw error;
+      
+      const { data: { publicUrl } } = supabase.storage
+        .from('products')
+        .getPublicUrl(fileName);
+        
+      setForm({ ...form, image_url: publicUrl });
+      toast.success('Imagem carregada com sucesso');
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao carregar imagem');
+    } finally {
+      setUploadingImage(false);
+    }
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,14 +102,25 @@ export default function ProductModal({ onClose, onSaved, initial }: {
         
         {/* HEADER */}
         <div className="flex items-center justify-between px-6 py-4 border-b bg-card z-10">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-md bg-secondary flex items-center justify-center text-muted-foreground overflow-hidden border">
+          <div className="flex items-center gap-4">
+            <label className="w-14 h-14 rounded-md bg-secondary flex items-center justify-center text-muted-foreground overflow-hidden border cursor-pointer relative group flex-shrink-0">
+              <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={uploadingImage} />
               {form.image_url ? (
                 <img src={form.image_url} alt="Produto" className="w-full h-full object-cover" />
               ) : (
-                <ImageIcon className="w-5 h-5" />
+                <ImageIcon className="w-6 h-6" />
               )}
-            </div>
+              {uploadingImage && (
+                <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                  <Loader2 className="w-5 h-5 animate-spin text-white" />
+                </div>
+              )}
+              {!uploadingImage && (
+                <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-center">
+                  <span className="text-[9px] font-bold text-white uppercase tracking-wider px-1">Mudar<br/>Foto</span>
+                </div>
+              )}
+            </label>
             <div>
               <h3 className="font-bold text-lg leading-none">{form.name || (isEdit ? 'Editar Produto' : 'Novo Produto/Serviço')}</h3>
               <p className="text-xs text-muted-foreground mt-1">{form.sku || 'Sem Ref. Interna'}</p>
@@ -116,9 +163,9 @@ export default function ProductModal({ onClose, onSaved, initial }: {
                 </div>
 
                 <div className="grid grid-cols-2 gap-5">
-                  <div>
-                    <label className="text-sm font-semibold mb-1.5 block">URL da Imagem (Opcional)</label>
-                    <input value={form.image_url ?? ''} onChange={(e) => setForm({ ...form, image_url: e.target.value })} className="w-full h-10 px-3 rounded-md border bg-background focus:ring-2 focus:ring-primary" placeholder="https://..." />
+                  <div className="flex flex-col justify-center text-muted-foreground bg-secondary/30 p-3 rounded-md border border-dashed text-[11px] leading-tight">
+                    <strong className="text-primary mb-1 block">📸 Fotografia do Artigo</strong>
+                    Clica na imagem no cabeçalho acima para fazeres upload direto do teu computador ou telemóvel.
                   </div>
                   <div>
                     <label className="text-sm font-semibold mb-1.5 block">Unidade de Medida Base</label>
