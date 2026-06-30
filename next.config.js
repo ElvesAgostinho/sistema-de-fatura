@@ -30,7 +30,7 @@ const securityHeaders = [
     value: [
       "default-src 'self'",
       // Scripts: self + Next.js inline scripts
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com https://apps.abacus.ai",
       // Styles: self + inline (Tailwind/radix needs inline)
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       // Fonts
