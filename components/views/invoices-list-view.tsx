@@ -14,6 +14,7 @@ type Invoice = {
   id: string; invoice_number: string; document_type: string;
   total: number; status: string; issued_at: string;
   payment_status?: string; amount_paid?: number;
+  agt_status?: string;
   client?: { name?: string; nif?: string } | null;
 };
 
@@ -202,6 +203,7 @@ export default function InvoicesListView() {
                 <th className="py-2.5 px-3">Total</th>
                 <th className="py-2.5 px-3 hidden md:table-cell">Em Dívida</th>
                 <th className="py-2.5 px-3">Estado</th>
+                <th className="py-2.5 px-3">AGT</th>
                 <th className="py-2.5 px-3 hidden sm:table-cell">Pagamento</th>
                 <th className="py-2.5 px-3 text-right">Ações</th>
               </tr>
@@ -235,6 +237,12 @@ export default function InvoicesListView() {
                       </td>
                       <td className="py-2 px-3">
                         {isCancelled ? <span className="inline-flex text-[10px] uppercase font-bold bg-destructive/10 text-destructive px-1.5 py-0.5 rounded">Cancelada</span> : <span className="inline-flex text-[10px] uppercase font-bold bg-primary/10 text-primary px-1.5 py-0.5 rounded">Emitida</span>}
+                      </td>
+                      <td className="py-2 px-3">
+                        {inv.agt_status === 'SYNCED' ? <span className="flex items-center gap-1 text-success text-[10px] font-bold uppercase"><CheckCircle2 className="w-3 h-3" /> Integrado</span> :
+                         inv.agt_status === 'FAILED' ? <span className="flex items-center gap-1 text-destructive text-[10px] font-bold uppercase"><XCircle className="w-3 h-3" /> Falhou</span> :
+                         inv.agt_status === 'SYNCING' ? <span className="flex items-center gap-1 text-warning text-[10px] font-bold uppercase"><Loader2 className="w-3 h-3 animate-spin" /> A Enviar</span> :
+                         <span className="flex items-center gap-1 text-muted-foreground text-[10px] font-bold uppercase">Pendente</span>}
                       </td>
                       <td className="py-2 px-3 hidden sm:table-cell">
                         {!['PP', 'OR', 'GT'].includes(inv.document_type) ? (

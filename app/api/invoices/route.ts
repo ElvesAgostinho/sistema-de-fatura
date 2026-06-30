@@ -26,7 +26,7 @@ export async function GET(req: Request) {
     const admin = createAdminClient();
     let query = admin
       .from('invoices')
-      .select('id, invoice_number, total, subtotal, tax, retention_tax, retention_rate, status, created_at, issued_at, payment_status, amount_paid, document_type, client:clients(name, nif)', { count: 'exact' })
+      .select('id, invoice_number, total, subtotal, tax, retention_tax, retention_rate, status, created_at, issued_at, payment_status, amount_paid, document_type, agt_status, client:clients(name, nif)', { count: 'exact' })
       .eq('company_id', ctx.profile.company_id);
 
     if (clientId) query = query.eq('client_id', clientId);
@@ -63,7 +63,7 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json();
-    const { client_id, items, tax_exempt, tax_exemption_reason, document_type, related_document, payment_method, valid_until, transport_details } = body ?? {};
+    const { client_id, items, tax_exempt, tax_exemption_reason, document_type, related_document, payment_method, valid_until, transport_details, service_start_date, service_end_date } = body ?? {};
 
     if (!client_id) return ApiResponse.error('Cliente obrigatório');
     if (!Array.isArray(items) || items.length === 0) return ApiResponse.error('Adicione pelo menos um item');
@@ -213,6 +213,8 @@ export async function POST(req: Request) {
         client_name: client.name, client_nif: client.nif, client_address: client.address,
         valid_until: (docType === 'PP' || docType === 'OR') ? valid_until : null,
         transport_details: docType === 'GT' ? transport_details : null,
+        service_start_date: service_start_date || null,
+        service_end_date: service_end_date || null,
         amount_paid: (docType === 'FR' || docType === 'RC') ? total : 0,
         payment_status: (docType === 'FR' || docType === 'RC') ? 'pago' : 'pendente'
       }).select().single();
@@ -277,6 +279,14 @@ export async function POST(req: Request) {
       redis.del(CacheKeys.dashboardStats(companyId)).catch(() => {});
       redis.del(CacheKeys.invoiceList(companyId, 'default')).catch(() => {});
     }
+
+    // Integração AGT WebService (Fire-and-forget)
+    const baseUrl = req.headers.get('origin') || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    fetch(`${baseUrl}/api/invoices/agt-sync`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ invoice_id: invoice.id })
+    }).catch(e => console.error('AGT trigger err', e));
 
     return ApiResponse.success({ invoice });
   } catch (err: any) {

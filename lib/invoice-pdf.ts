@@ -1,5 +1,6 @@
 import QRCode from 'qrcode';
 import { formatAOA, formatDateTime } from '@/lib/utils';
+import { numeroPorExtenso } from '@/lib/extenso';
 
 function esc(s: any): string {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]!));
@@ -260,6 +261,7 @@ ${/* ════ CABEÇALHO — estilo Xero ════ */''}
 
 ${cancelled ? `<div class="no-break" style="background:#fee2e2;border-left:3px solid #dc2626;border-radius:0 6px 6px 0;padding:10px 14px;margin-bottom:16px;font-size:11px;color:#991b1b;font-weight:600;">⚠ FATURA CANCELADA — ${esc(inv.cancellation_reason ?? 'Sem motivo registado')}</div>` : ''}
 ${inv.related_document ? `<div class="no-break" style="background:#eff6ff;border-left:3px solid ${primaryColor};border-radius:0 6px 6px 0;padding:8px 14px;margin-bottom:14px;font-size:10.5px;">Documento relacionado: <strong>${esc(inv.related_document)}</strong></div>` : ''}
+${(inv.service_start_date || inv.service_end_date) ? `<div class="no-break" style="background:#f3f4f6;border-left:3px solid #6b7280;border-radius:0 6px 6px 0;padding:8px 14px;margin-bottom:14px;font-size:10.5px;"><strong>Período de Serviço:</strong> ${inv.service_start_date ? new Date(inv.service_start_date).toLocaleDateString('pt-AO') : 'N/A'} a ${inv.service_end_date ? new Date(inv.service_end_date).toLocaleDateString('pt-AO') : 'N/A'}</div>` : ''}
 ${inv.tax_exemption_reason ? `<div class="no-break" style="background:#fffbeb;border-left:3px solid #f59e0b;border-radius:0 6px 6px 0;padding:8px 14px;margin-bottom:14px;font-size:10.5px;"><strong>Isenção de IVA:</strong> ${esc(inv.tax_exemption_reason)}</div>` : ''}
 
 ${/* ════ CLIENTE + EMITENTE — estilo Xero (caixas subtis) ════ */''}
@@ -335,6 +337,10 @@ ${/* ════ TOTAIS + QR — nunca parte de página ════ */''}
     </div>
 
   </div>
+</div>
+
+<div class="no-break" style="margin-top:14px;padding-top:10px;border-top:1px dashed #e5e7eb;font-size:11px;color:#374151;">
+  <strong>Valor por extenso:</strong> ${esc(numeroPorExtenso(Number(inv.total)))}
 </div>
 
 ${taxSummaryHtml}
