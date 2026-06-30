@@ -49,7 +49,7 @@ export default function AccountingDashboardView() {
             </div>
           </div>
           <div className="mt-4 pt-4 border-t border-border flex justify-end">
-            <Link href="/accounting/invoices-registry" className="text-xs text-primary hover:underline">Ver Livro de Faturas &rarr;</Link>
+            <Link href="/invoices" className="text-xs text-primary hover:underline">Ver Livro de Faturas &rarr;</Link>
           </div>
         </div>
 
