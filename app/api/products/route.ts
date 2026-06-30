@@ -23,7 +23,7 @@ export async function GET(req: Request) {
   const fetchProducts = async () => {
     let q = admin
       .from('products')
-      .select('id, name, description, price, tax_rate, sku, track_stock, quantity_in_stock, stock_alert_threshold, is_active, created_at, product_type')
+      .select('id, name, description, price, tax_rate, sku, barcode, base_uom, image_url, track_stock, quantity_in_stock, stock_alert_threshold, is_active, created_at, product_type')
       .eq('company_id', companyId);
 
     if (!includeInactive) q = q.eq('is_active', true);
@@ -54,7 +54,7 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json();
-    const { name, description, price, tax_rate, sku, track_stock, quantity_in_stock, stock_alert_threshold, product_type } = body ?? {};
+    const { name, description, price, tax_rate, sku, track_stock, quantity_in_stock, stock_alert_threshold, product_type, base_uom, purchase_uom, barcode, image_url, variants } = body ?? {};
     if (!name || price == null) return ApiResponse.error('Nome e preço obrigatórios');
 
     const p = Number(price);
@@ -66,6 +66,10 @@ export async function POST(req: Request) {
       company_id: ctx.profile.company_id,
       name, description: description ?? null, price: p, tax_rate: t,
       sku: sku ?? null,
+      barcode: barcode ?? null,
+      image_url: image_url ?? null,
+      base_uom: base_uom ?? 'un',
+      purchase_uom: purchase_uom ?? null,
       product_type: product_type === 'S' ? 'S' : 'P',
       track_stock: product_type === 'S' ? false : !!track_stock,
       is_active: true,
@@ -77,6 +81,18 @@ export async function POST(req: Request) {
 
     const { data, error } = await admin.from('products').insert(payload).select().single();
     if (error) return ApiResponse.error(error.message);
+
+    // Se existirem variantes no payload, insere-as
+    if (variants && Array.isArray(variants) && variants.length > 0) {
+      const vPayload = variants.map(v => ({
+        product_id: data.id,
+        name: v.name,
+        sku: v.sku,
+        barcode: v.barcode,
+        price_adjustment: Number(v.price_adjustment ?? 0)
+      }));
+      await admin.from('product_variants').insert(vPayload);
+    }
 
     // Invalidate product list cache so next GET reflects the new product immediately
     if (redis) {

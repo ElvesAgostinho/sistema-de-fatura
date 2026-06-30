@@ -207,8 +207,9 @@ export default function ProductsView() {
               <table className="w-full text-[13px]">
                 <thead className="bg-muted/50 sticky top-0 backdrop-blur-sm z-10 border-b">
                   <tr className="text-left font-medium text-muted-foreground">
-                    <th className="py-2.5 px-3">Nome</th>
-                    <th className="py-2.5 px-3 hidden sm:table-cell">SKU</th>
+                    <th className="py-2.5 px-3 w-10"></th>
+                    <th className="py-2.5 px-3">Nome do Produto</th>
+                    <th className="py-2.5 px-3 hidden sm:table-cell">SKU / Cód. Barras</th>
                     <th className="py-2.5 px-3">Tipo <span className="text-[9px] text-primary font-normal">(SAF-T)</span></th>
                     <th className="py-2.5 px-3 text-right">Preço</th>
                     <th className="py-2.5 px-3 text-right hidden sm:table-cell">IVA</th>
@@ -222,10 +223,22 @@ export default function ProductsView() {
                     return (
                       <tr key={p.id} className="hover:bg-muted/40 even:bg-muted/10 transition-colors">
                         <td className="py-2 px-3">
-                          <div className="font-medium text-foreground">{p.name}</div>
+                          <div className="w-8 h-8 rounded bg-secondary flex items-center justify-center overflow-hidden border">
+                            {(p as any).image_url ? (
+                              <img src={(p as any).image_url} alt={p.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <Package className="w-4 h-4 text-muted-foreground" />
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-2 px-3">
+                          <div className="font-bold text-foreground">{p.name}</div>
                           {p.description && <div className="text-[11px] text-muted-foreground truncate max-w-[200px]">{p.description}</div>}
                         </td>
-                        <td className="py-2 px-3 font-mono text-[11px] text-muted-foreground hidden sm:table-cell">{p.sku ?? '-'}</td>
+                        <td className="py-2 px-3 font-mono text-[11px] text-muted-foreground hidden sm:table-cell">
+                          <div className="font-semibold">{p.sku ?? '-'}</div>
+                          <div className="text-[10px] opacity-70">{(p as any).barcode ?? '-'}</div>
+                        </td>
                         <td className="py-2 px-3">
                           {(() => {
                             const types: Record<string, { label: string; color: string }> = {
