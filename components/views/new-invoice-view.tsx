@@ -378,26 +378,26 @@ export default function NewInvoiceView() {
                   <div className="grid grid-cols-12 gap-2">
                     <div className="col-span-12">
                       <label className="text-xs text-muted-foreground mb-1 block">Descrição</label>
-                      <div className="flex gap-2">
+                      <div className="flex flex-col sm:flex-row gap-2">
                         <input value={it.description} onChange={(e) => updateItem(it.id, { description: e.target.value })} placeholder="Ex: Consultoria de TI" className="flex-1 h-11 px-3 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
-                        <div className="w-[250px] shrink-0">
+                        <div className="w-full sm:w-[250px] shrink-0">
                           <ProductSearchSelector onSelect={(p) => applyProduct(it.id, p)} placeholder="Do catálogo..." />
                         </div>
                       </div>
                     </div>
-                    <div className="col-span-3">
+                    <div className="col-span-6 sm:col-span-3">
                       <label className="text-xs text-muted-foreground mb-1 block">Quantidade</label>
                       <input type="number" min="0" step="0.001" value={it.quantity} onChange={(e) => updateItem(it.id, { quantity: Number(e.target.value) })} className="w-full h-9 px-3 rounded border border-input bg-background text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary" />
                     </div>
-                    <div className="col-span-3">
+                    <div className="col-span-6 sm:col-span-3">
                       <label className="text-xs text-muted-foreground mb-1 block">Preço unit. (AOA)</label>
                       <input type="number" min="0" step="0.01" value={it.price} onChange={(e) => updateItem(it.id, { price: Number(e.target.value) })} className="w-full h-9 px-3 rounded border border-input bg-background text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary" />
                     </div>
-                    <div className="col-span-3">
+                    <div className="col-span-6 sm:col-span-3">
                       <label className="text-xs text-muted-foreground mb-1 block">Desc %</label>
                       <input type="number" min="0" max="100" step="0.01" value={it.discount ?? 0} onChange={(e) => updateItem(it.id, { discount: Number(e.target.value) })} className="w-full h-9 px-3 rounded border border-input bg-background text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary" />
                     </div>
-                    <div className="col-span-3">
+                    <div className="col-span-6 sm:col-span-3">
                       <label className="text-xs text-muted-foreground mb-1 block">IVA %</label>
                       <input type="number" min="0" max="100" step="0.01" value={taxExempt ? 0 : it.tax_rate} disabled={taxExempt} onChange={(e) => updateItem(it.id, { tax_rate: Number(e.target.value) })} className="w-full h-9 px-3 rounded border border-input bg-background text-sm font-mono disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-primary" />
                     </div>
