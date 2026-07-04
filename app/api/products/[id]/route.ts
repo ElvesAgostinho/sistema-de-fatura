@@ -23,43 +23,53 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   if (!ctx?.profile) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const admin = createAdminClient();
 
-  try {
-    const body = await req.json();
-    const { name, description, price, tax_rate, sku, track_stock, quantity_in_stock, stock_alert_threshold, product_type } = body ?? {};
-    if (!name) return NextResponse.json({ error: 'Nome obrigatório' }, { status: 400 });
-    if (price == null || Number(price) < 0) return NextResponse.json({ error: 'Preço inválido' }, { status: 400 });
+    try {
+      const body = await req.json();
+      const { name, description, price, tax_rate, sku, track_stock, quantity_in_stock, stock_alert_threshold, product_type, barcode, base_uom, image_url } = body ?? {};
+      if (!name) return NextResponse.json({ error: 'Nome obrigatório' }, { status: 400 });
+      if (price == null || Number(price) < 0) return NextResponse.json({ error: 'Preço inválido' }, { status: 400 });
 
-    const { data: existing } = await admin.from('products')
-      .select('id, name').eq('id', params.id).eq('company_id', ctx.profile.company_id).maybeSingle();
-    if (!existing) return NextResponse.json({ error: 'Produto não encontrado' }, { status: 404 });
+      const { data: existing } = await admin.from('products')
+        .select('id, name').eq('id', params.id).eq('company_id', ctx.profile.company_id).maybeSingle();
+      if (!existing) return NextResponse.json({ error: 'Produto não encontrado' }, { status: 404 });
 
-    const update: any = {
-      name,
-      description: description ?? null,
-      price: Number(price),
-      tax_rate: Number(tax_rate ?? 14),
-      sku: sku ?? null,
-      product_type: product_type === 'S' ? 'S' : 'P',
-      track_stock: product_type === 'S' ? false : !!track_stock,
-    };
-    if (update.track_stock) {
-      update.quantity_in_stock = Number(quantity_in_stock ?? 0);
-      update.stock_alert_threshold = Number(stock_alert_threshold ?? 0);
-    } else {
-      update.quantity_in_stock = 0;
-      update.stock_alert_threshold = 0;
-    }
+      const update: any = {
+        name,
+        description: description ?? null,
+        price: Number(price),
+        tax_rate: Number(tax_rate ?? 14),
+        sku: sku ?? null,
+        barcode: barcode ?? null,
+        base_uom: base_uom ?? 'un',
+        image_url: image_url ?? null,
+        product_type: product_type === 'S' ? 'S' : 'P',
+        track_stock: product_type === 'S' ? false : !!track_stock,
+      };
+      if (update.track_stock) {
+        update.quantity_in_stock = Number(quantity_in_stock ?? 0);
+        update.stock_alert_threshold = Number(stock_alert_threshold ?? 0);
+      } else {
+        update.quantity_in_stock = 0;
+        update.stock_alert_threshold = 0;
+      }
 
-    const { data, error } = await admin.from('products').update(update)
-      .eq('id', params.id).eq('company_id', ctx.profile.company_id).select().single();
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+      const { data, error } = await admin.from('products').update(update)
+        .eq('id', params.id).eq('company_id', ctx.profile.company_id).select().single();
+      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
-    await admin.from('audit_logs').insert({
-      user_id: ctx.user.id, company_id: ctx.profile.company_id,
-      action: 'product.update', entity: 'product', entity_id: data.id,
-      details: { before: existing.name, after: name },
-    });
-    return NextResponse.json({ product: data });
+      // Invalidate cache
+      const { redis } = await import('@/lib/redis');
+      const { CacheKeys } = await import('@/lib/cache-keys');
+      if (redis) {
+        await redis.del(CacheKeys.productList(ctx.profile.company_id)).catch(() => {});
+      }
+
+      await admin.from('audit_logs').insert({
+        user_id: ctx.user.id, company_id: ctx.profile.company_id,
+        action: 'product.update', entity: 'product', entity_id: data.id,
+        details: { before: existing.name, after: name },
+      });
+      return NextResponse.json({ product: data });
   } catch (err: any) {
     return NextResponse.json({ error: err?.message ?? 'Erro' }, { status: 500 });
   }

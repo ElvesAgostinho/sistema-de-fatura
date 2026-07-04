@@ -11,11 +11,11 @@ export const dynamic = 'force-dynamic';
 function PageSkeleton() {
   return (
     <div style={{ padding: '2rem', animation: 'pulse 1.5s ease-in-out infinite' }}>
-      <div style={{ height: 28, background: 'hsl(var(--muted))', borderRadius: 6, width: '40%', marginBottom: '1.5rem' }} />
+      <div style={{ height: 28, background: 'rgb(var(--muted))', borderRadius: 6, width: '40%', marginBottom: '1.5rem' }} />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '1rem', marginBottom: '2rem' }}>
-        {[1,2,3].map(i => <div key={i} style={{ height: 100, background: 'hsl(var(--muted))', borderRadius: 8 }} />)}
+        {[1,2,3].map(i => <div key={i} style={{ height: 100, background: 'rgb(var(--muted))', borderRadius: 8 }} />)}
       </div>
-      <div style={{ height: 300, background: 'hsl(var(--muted))', borderRadius: 8 }} />
+      <div style={{ height: 300, background: 'rgb(var(--muted))', borderRadius: 8 }} />
       <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }`}</style>
     </div>
   );

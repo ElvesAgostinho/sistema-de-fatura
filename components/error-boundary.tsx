@@ -86,8 +86,8 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
               padding: 2rem;
             }
             .error-boundary-card {
-              background: hsl(var(--card));
-              border: 1px solid hsl(var(--border));
+              background: rgb(var(--card));
+              border: 1px solid rgb(var(--border));
               border-radius: 12px;
               padding: 2.5rem;
               max-width: 480px;
@@ -97,27 +97,27 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
             }
             .error-boundary-icon {
               width: 56px; height: 56px; border-radius: 50%;
-              background: hsl(var(--destructive) / 0.1);
-              color: hsl(var(--destructive));
+              background: rgb(var(--destructive) / 0.1);
+              color: rgb(var(--destructive));
               display: flex; align-items: center; justify-content: center;
               margin: 0 auto 1.25rem;
             }
             .error-boundary-title {
               font-size: 1.2rem; font-weight: 700; margin-bottom: 0.5rem;
-              color: hsl(var(--foreground));
+              color: rgb(var(--foreground));
             }
             .error-boundary-subtitle {
-              color: hsl(var(--muted-foreground)); font-size: 0.9rem;
+              color: rgb(var(--muted-foreground)); font-size: 0.9rem;
               margin-bottom: 1.5rem; line-height: 1.6;
             }
             .error-boundary-detail {
-              background: hsl(var(--muted));
+              background: rgb(var(--muted));
               border-radius: 6px; padding: 0.75rem;
               font-size: 0.75rem; text-align: left;
               overflow: auto; max-height: 120px;
               margin-bottom: 1.5rem;
-              color: hsl(var(--destructive));
-              border: 1px solid hsl(var(--border));
+              color: rgb(var(--destructive));
+              border: 1px solid rgb(var(--border));
             }
             .error-boundary-actions {
               display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap;
@@ -126,15 +126,15 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
               display: inline-flex; align-items: center; gap: 6px;
               padding: 0.55rem 1.25rem; border-radius: 8px;
               font-size: 0.875rem; font-weight: 500; cursor: pointer;
-              border: 1px solid hsl(var(--border));
-              background: hsl(var(--background));
-              color: hsl(var(--foreground));
+              border: 1px solid rgb(var(--border));
+              background: rgb(var(--background));
+              color: rgb(var(--foreground));
               transition: all 0.2s;
             }
-            .error-boundary-btn:hover { background: hsl(var(--secondary)); }
+            .error-boundary-btn:hover { background: rgb(var(--secondary)); }
             .error-boundary-btn--primary {
-              background: hsl(var(--primary));
-              color: hsl(var(--primary-foreground));
+              background: rgb(var(--primary));
+              color: rgb(var(--primary-foreground));
               border-color: transparent;
             }
             .error-boundary-btn--primary:hover { opacity: 0.9; }
