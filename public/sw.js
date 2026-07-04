@@ -1,7 +1,14 @@
 // Service worker for FaturaAO (PWA)
-// v2 — network-first for HTML to avoid serving stale app shells
-const CACHE = 'faturaao-v2';
+// v3 — network-first for HTML, stale-while-revalidate for API GET requests
+const CACHE = 'faturaao-v3';
 const PRECACHE = [
+  '/',
+  '/dashboard',
+  '/invoices',
+  '/invoices/new',
+  '/clients',
+  '/products',
+  '/login',
   '/manifest.json',
   '/favicon.svg',
   '/icon-192.png',
@@ -28,10 +35,28 @@ self.addEventListener('fetch', (e) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
 
-  // Never cache API calls — always go to the network
-  if (url.pathname.startsWith('/api/')) return;
   // Don't intercept cross-origin requests
   if (url.origin !== self.location.origin) return;
+
+  // Stale-while-revalidate for API GET requests (Reference data like clients/products)
+  if (url.pathname.startsWith('/api/')) {
+    e.respondWith(
+      caches.match(req).then((cached) => {
+        const fetchPromise = fetch(req).then((res) => {
+          if (res && res.status === 200) {
+            const clone = res.clone();
+            caches.open(CACHE).then((c) => c.put(req, clone)).catch(() => {});
+          }
+          return res;
+        }).catch(() => {
+          // If offline and no cache, just let it fail or return a dummy JSON if needed
+        });
+        // Return cached immediately if available, else wait for network
+        return cached || fetchPromise;
+      })
+    );
+    return;
+  }
 
   const isHtml = req.mode === 'navigate' || req.headers.get('accept')?.includes('text/html');
 

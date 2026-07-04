@@ -9,6 +9,7 @@ import { useResource } from '@/lib/hooks/use-resource';
 import { useDebounced } from '@/lib/hooks/use-debounced';
 import { useProfile } from '@/lib/hooks/use-profile';
 import ExportButton from '@/components/export-button';
+import { getPendingInvoices } from '@/lib/offline-sync';
 
 type Invoice = {
   id: string; invoice_number: string; document_type: string;
@@ -57,6 +58,17 @@ export default function InvoicesListView() {
     setDateTo('');
     setPage(1);
   };
+
+  const [pendingSync, setPendingSync] = useState<any[]>([]);
+  
+  // Load pending invoices
+  useMemo(() => {
+    if (typeof window !== 'undefined') {
+      getPendingInvoices().then(p => {
+        if (p) setPendingSync(p.reverse()); // latest first
+      }).catch(e => console.log('No pending invoices', e));
+    }
+  }, [page]); // recheck occasionally
 
   const { data, loading, validating, reload, error } = useResource<ApiResp>(url, {
     ttl: 60_000,
@@ -211,10 +223,29 @@ export default function InvoicesListView() {
             <tbody className="divide-y divide-border">
               {loading || validating ? (
                 <tr><td colSpan={8} className="py-10 text-center"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground mx-auto" /></td></tr>
-              ) : invoices.length === 0 ? (
+              ) : invoices.length === 0 && pendingSync.length === 0 ? (
                 <tr><td colSpan={8} className="py-10 text-center text-muted-foreground">Nenhuma fatura encontrada. Tente ajustar os filtros.</td></tr>
               ) : (
-                invoices.map((inv) => {
+                <>
+                  {pendingSync.map((inv: any) => {
+                    const clientName = 'Desconhecido (Offline)'; // or we can try to fetch from ID, but keep it simple
+                    return (
+                      <tr key={inv.id} className="bg-orange-50/50 hover:bg-orange-50/80 transition-colors">
+                        <td className="py-2 px-3 font-mono font-medium text-orange-600 text-xs sm:text-sm">
+                          Pendente...
+                        </td>
+                        <td className="py-2 px-3 font-medium max-w-[120px] truncate">{clientName}</td>
+                        <td className="py-2 px-3 text-muted-foreground hidden sm:table-cell">{formatDateTime(inv.createdAt)}</td>
+                        <td className="py-2 px-3 font-mono text-xs sm:text-sm">{formatAOA(inv.items?.reduce((acc: number, it: any) => acc + (it.price * it.quantity), 0) || 0)}</td>
+                        <td className="py-2 px-3 font-mono hidden md:table-cell"><span className="text-muted-foreground">-</span></td>
+                        <td className="py-2 px-3"><span className="inline-flex text-[10px] uppercase font-bold bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded">A Aguardar Rede</span></td>
+                        <td className="py-2 px-3"><span className="text-muted-foreground">-</span></td>
+                        <td className="py-2 px-3 hidden sm:table-cell"><span className="text-muted-foreground">-</span></td>
+                        <td className="py-2 px-3 text-right"><span className="text-xs text-orange-600">Sync auto...</span></td>
+                      </tr>
+                    );
+                  })}
+                  {invoices.map((inv) => {
                   const clientName = inv.client?.name || 'Consumidor Final';
                   const debt = inv.total - (inv.amount_paid ?? 0);
                   const isCancelled = inv.status === 'cancelled';
@@ -264,7 +295,8 @@ export default function InvoicesListView() {
                       </td>
                     </tr>
                   );
-                })
+                })}
+                </>
               )}
             </tbody>
           </table>

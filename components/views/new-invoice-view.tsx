@@ -10,6 +10,7 @@ import ProductModal from '@/components/modals/product-modal';
 import ProductSearchSelector from '@/components/selectors/product-search-selector';
 import { useAppStore } from '@/lib/store/use-app-store';
 import { useResource } from '@/lib/hooks/use-resource';
+import { savePendingInvoice } from '@/lib/offline-sync';
 
 type Client = { id: string; name: string; nif: string };
 type Product = { id: string; name: string; price: number; tax_rate: number; description?: string | null };
@@ -178,19 +179,29 @@ export default function NewInvoiceView() {
 
     setSubmitting(true);
     try {
+      const payload = {
+        client_id: clientId, items,
+        tax_exempt: taxExempt,
+        tax_exemption_reason: taxExempt ? taxExemptionReason : null,
+        document_type: docType,
+        related_document: (docType === 'NC' || docType === 'ND') ? relatedDocument.trim() : null,
+        payment_method: (docType === 'FR' || docType === 'RC') ? paymentMethod : null,
+        valid_until: (docType === 'PP' || docType === 'OR') ? new Date(validUntil).toISOString() : null,
+        transport_details: docType === 'GT' ? transportDetails : null,
+        apply_retention: applyRetention,
+      };
+
+      if (!navigator.onLine) {
+        await savePendingInvoice(payload);
+        useAppStore.getState().setInvoiceDraft(null);
+        toast.success(`Fatura salva localmente! Será sincronizada quando a internet voltar.`);
+        router.push(`/invoices`);
+        return;
+      }
+
       const r = await fetch('/api/invoices', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          client_id: clientId, items,
-          tax_exempt: taxExempt,
-          tax_exemption_reason: taxExempt ? taxExemptionReason : null,
-          document_type: docType,
-          related_document: (docType === 'NC' || docType === 'ND') ? relatedDocument.trim() : null,
-          payment_method: (docType === 'FR' || docType === 'RC') ? paymentMethod : null,
-          valid_until: (docType === 'PP' || docType === 'OR') ? new Date(validUntil).toISOString() : null,
-          transport_details: docType === 'GT' ? transportDetails : null,
-          apply_retention: applyRetention,
-        }),
+        body: JSON.stringify(payload),
       });
       const text = await r.text();
       let j: any = {};
